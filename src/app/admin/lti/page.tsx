@@ -81,6 +81,9 @@ export default async function AdminLtiPage({
         ? {
             title: 'Mapeos de Actividades LTI',
             subtitle: 'Conecta cada actividad de la LMS con un bot y, si hace falta, con una organización de reporting distinta de la organización wrapper.',
+            searchLabel: 'Búsqueda general',
+            botSearchLabel: 'Bot elegible',
+            orgSearchLabel: 'Organización de reporting',
             searchPlaceholder: 'Buscar por organización wrapper, organización de reporting, contexto, actividad o bot',
             botSearchPlaceholder: 'Buscar bot elegible...',
             orgSearchPlaceholder: 'Buscar organización de reporting...',
@@ -120,6 +123,9 @@ export default async function AdminLtiPage({
         : {
             title: 'LTI Activity Mappings',
             subtitle: 'Map each LMS activity to a bot and, optionally, to a reporting organization distinct from the wrapper organization.',
+            searchLabel: 'General search',
+            botSearchLabel: 'Eligible bot',
+            orgSearchLabel: 'Reporting organization',
             searchPlaceholder: 'Search by wrapper organization, reporting organization, context, activity, or bot',
             botSearchPlaceholder: 'Search eligible bot...',
             orgSearchPlaceholder: 'Search reporting organization...',
@@ -252,38 +258,75 @@ export default async function AdminLtiPage({
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
                 <div>
                     <h1 className="text-4xl font-black tracking-tighter text-slate-900">{copy.title}</h1>
                     <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
                         {copy.subtitle}
                     </p>
                 </div>
-                <form className="flex w-full flex-col gap-2 md:w-auto md:flex-row" method="GET">
-                    <div className="grid w-full gap-2 md:w-auto md:grid-cols-3">
-                        <Input
-                            name="search"
-                            defaultValue={search}
-                            placeholder={copy.searchPlaceholder}
-                            className="w-full bg-white md:w-80"
-                        />
-                        <Input
-                            name="botSearch"
-                            defaultValue={botSearch}
-                            placeholder={copy.botSearchPlaceholder}
-                            className="w-full bg-white md:w-56"
-                        />
-                        <Input
-                            name="orgSearch"
-                            defaultValue={orgSearch}
-                            placeholder={copy.orgSearchPlaceholder}
-                            className="w-full bg-white md:w-56"
-                        />
-                    </div>
-                    <input type="hidden" name="status" value={status} />
-                    <Button type="submit">{copy.filter}</Button>
-                </form>
             </div>
+
+            <Card className="overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm">
+                <CardContent className="p-6">
+                    <form
+                        className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.8fr)_minmax(220px,1fr)_minmax(220px,1fr)_auto]"
+                        method="GET"
+                    >
+                        <div className="space-y-2">
+                            <label
+                                htmlFor="lti-search"
+                                className="text-xs font-bold uppercase tracking-widest text-slate-500"
+                            >
+                                {copy.searchLabel}
+                            </label>
+                            <Input
+                                id="lti-search"
+                                name="search"
+                                defaultValue={search}
+                                placeholder={copy.searchPlaceholder}
+                                className="h-10 w-full bg-white"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label
+                                htmlFor="lti-bot-search"
+                                className="text-xs font-bold uppercase tracking-widest text-slate-500"
+                            >
+                                {copy.botSearchLabel}
+                            </label>
+                            <Input
+                                id="lti-bot-search"
+                                name="botSearch"
+                                defaultValue={botSearch}
+                                placeholder={copy.botSearchPlaceholder}
+                                className="h-10 w-full bg-white"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label
+                                htmlFor="lti-org-search"
+                                className="text-xs font-bold uppercase tracking-widest text-slate-500"
+                            >
+                                {copy.orgSearchLabel}
+                            </label>
+                            <Input
+                                id="lti-org-search"
+                                name="orgSearch"
+                                defaultValue={orgSearch}
+                                placeholder={copy.orgSearchPlaceholder}
+                                className="h-10 w-full bg-white"
+                            />
+                        </div>
+                        <div className="flex items-end">
+                            <input type="hidden" name="status" value={status} />
+                            <Button type="submit" className="h-10 w-full lg:w-auto">
+                                {copy.filter}
+                            </Button>
+                        </div>
+                    </form>
+                </CardContent>
+            </Card>
 
             {notice ? (
                 <div
