@@ -9,7 +9,7 @@
         "start": "next start",
         "lint": "eslint .",
         "typecheck": "tsc --noEmit",
-        "test": "NODE_ENV=test node --import tsx --test tests/**/*.test.ts",
+        "test": "NODE_ENV=test node --import tsx --test tests/*.test.ts",
         "test:functional": "NODE_ENV=test node --import tsx --test tests/flow-engine.test.ts tests/sanitizer.test.ts",
         "test:security": "NODE_ENV=test node --import tsx --test tests/request-validation.test.ts tests/rate-limit.test.ts tests/sanitizer.test.ts",
         "prisma:generate": "prisma generate",
