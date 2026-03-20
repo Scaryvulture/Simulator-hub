@@ -1,0 +1,33 @@
+# Local/runtime artifacts
+.env
+.env*
+.next
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.tmp
+.tmp/
+*.dump
+backup_*.dump
+
+# Non-runtime docs/assets
+AUDITORIA_TECNICA_ESTADO_PROYECTO.md
+EXPORT_CODIGO_PROYECTO_CHATGPT.md
+DOCUMENTACION_CONFLUENCE_COMPLETA.md
+MAPA_CODIGO_DEPLOY.md
+README_ADMIN_RAG.md
+RESUMEN_*.md
+project_context.md
+.tmp-ql
+
+# Local support/test scripts not needed in deployment bundle
+tests
+scripts
+check_db.ts
+setup_safe_test.ts
+verify-seed.ts
+prisma/dev.db
+prisma/seed.ts
+prisma/seed.js
+prisma/seed-orgs.ts

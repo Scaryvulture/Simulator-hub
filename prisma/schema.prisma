@@ -1,0 +1,487 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Bot {
+  id                     String            @id @default(uuid())
+  name                   String
+  bot_type               String            @default("SIMULATOR")  // Types: 'SIMULATOR', 'EXAMINER', 'DETECTOR', 'GENERIC'
+  logo                   Bytes?            // Storing image as bytes
+  api_key                String? // Bot-specific OpenAI API Key
+  openai_prompt_id       String
+  openai_vector_store_id String? // For RAG retrieval
+  prompt_version         String?           @default("1")
+  published              Boolean           @default(false)
+  config                 Json // Flexible JSON for bot-specific logic/parameters
+  created_at             DateTime?         @default(now())
+  deleted_at             DateTime?
+  sessions               Session[]
+  assignments            BotAssignment[] // Direct user-to-bot assignments
+  organization_bots      OrganizationBot[]
+  versions               BotVersion[]
+  qa_runs                QaRun[]
+  api_key_access_audits  ApiKeyAccessAudit[]
+  lti_activity_mappings  LtiActivityMapping[]
+  @@index([deleted_at, created_at])
+  @@map("bots")
+}
+
+model BotVersion {
+  id             String   @id @default(uuid())
+  bot_id         String
+  version_number Int
+  config         Json
+  prompt_version String
+  environment    String // 'STAGING', 'PROD', 'DEV'
+  created_at     DateTime @default(now())
+
+  bot Bot @relation(fields: [bot_id], references: [id], onDelete: Cascade)
+
+  @@unique([bot_id, version_number])
+  @@index([bot_id])
+  @@map("bot_versions")
+}
+
+model AppUser {
+  id              String               @id @default(uuid())
+  username        String               @unique
+  email           String?              @unique
+  password_hash   String
+  lti_issuer      String?
+  lti_subject     String?
+  lti_username    String?
+  role            AppRole              @default(USER)
+  created_at      DateTime?            @default(now())
+  assignments     BotAssignment[] // Direct user-to-bot assignments
+  org_memberships OrganizationMember[]
+  auth_sessions   AuthSession[]
+  qa_suites       QaSuite[]
+  qa_runs         QaRun[]
+  api_key_access_audits ApiKeyAccessAudit[]
+
+  @@unique([lti_issuer, lti_subject])
+  @@map("users")
+}
+
+enum ApiKeyResourceType {
+  BOT
+  TTS
+  QA_LAB
+}
+
+model ApiKeyAccessAudit {
+  id            String             @id @default(uuid())
+  resource_type ApiKeyResourceType
+  resource_id   String
+  bot_id        String?
+  admin_id      String
+  ip_address    String?
+  user_agent    String?
+  created_at    DateTime           @default(now())
+
+  bot   Bot?    @relation(fields: [bot_id], references: [id], onDelete: SetNull)
+  admin AppUser @relation(fields: [admin_id], references: [id], onDelete: Cascade)
+
+  @@index([resource_type, created_at])
+  @@index([resource_id, created_at])
+  @@index([bot_id, created_at])
+  @@index([admin_id, created_at])
+  @@map("audit_key_access")
+}
+
+model AuthSession {
+  id            String    @id @default(uuid())
+  user_id       String
+  expires_at    DateTime
+  last_seen_at  DateTime  @default(now())
+  revoked_at    DateTime?
+  revoke_reason String?
+  ip_address    String?
+  user_agent    String?
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  user AppUser @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([revoked_at])
+  @@index([expires_at])
+  @@index([last_seen_at])
+  @@map("auth_sessions")
+}
+
+enum AppRole {
+  ADMIN
+  ORG_ADMIN
+  USER
+}
+
+model BotAssignment {
+  user_id String
+  bot_id  String
+
+  user AppUser @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  bot  Bot     @relation(fields: [bot_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, bot_id])
+  @@index([user_id])
+  @@index([bot_id])
+  @@map("bot_assignments")
+}
+
+model Organization {
+  id                 String    @id @default(uuid())
+  name               String
+  logo               Bytes? // Storing image as bytes
+  sso_id             String?   @unique // ID from LTI/SSO provider
+  allow_manual_login Boolean   @default(true)
+  created_at         DateTime? @default(now())
+
+  members  OrganizationMember[]
+  bots     OrganizationBot[]
+  sessions Session[]
+  lti_reporting_activity_mappings LtiActivityMapping[] @relation("LtiReportingOrganizationMappings")
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id              String  @id @default(uuid())
+  organization_id String
+  user_id         String
+  role            OrgRole @default(MEMBER)
+
+  organization Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  user         AppUser      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([organization_id, user_id])
+  @@index([user_id, role])
+  @@map("organization_members")
+}
+
+model OrganizationBot {
+  organization_id String
+  bot_id          String
+
+  organization Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  bot          Bot          @relation(fields: [bot_id], references: [id], onDelete: Cascade)
+
+  @@id([organization_id, bot_id])
+  @@index([bot_id])
+  @@map("organization_bots")
+}
+
+enum OrgRole {
+  ORG_ADMIN
+  MEMBER
+}
+
+enum LtiActivityMappingStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+}
+
+model LtiActivityMapping {
+  id                  String                   @id @default(uuid())
+  issuer              String
+  client_id           String
+  deployment_id       String                   @default("")
+  context_id          String                   @default("")
+  context_title       String?
+  context_label       String?
+  resource_link_id    String
+  resource_link_title String?
+  org_sso_id          String?
+  org_name            String?
+  bot_id              String?
+  reporting_organization_id String?
+  status              LtiActivityMappingStatus @default(PENDING)
+  last_seen_at        DateTime                 @default(now())
+  created_at          DateTime                 @default(now())
+  updated_at          DateTime                 @updatedAt
+
+  bot                    Bot?          @relation(fields: [bot_id], references: [id], onDelete: SetNull)
+  reporting_organization Organization? @relation("LtiReportingOrganizationMappings", fields: [reporting_organization_id], references: [id], onDelete: SetNull)
+
+  @@unique([issuer, client_id, deployment_id, context_id, resource_link_id])
+  @@index([status, updated_at])
+  @@index([bot_id, status])
+  @@index([reporting_organization_id, status])
+  @@index([org_sso_id, updated_at])
+  @@map("lti_activity_mappings")
+}
+
+model Session {
+  id               String        @id @default(uuid())
+  bot_id           String?
+  organization_id  String? // Link session to an organization
+  external_user_id String?
+  metadata         Json? // Storing as JSON
+  created_at       DateTime?     @default(now())
+  ended            Boolean       @default(false)
+  bot              Bot?          @relation(fields: [bot_id], references: [id], onDelete: SetNull)
+  organization     Organization? @relation(fields: [organization_id], references: [id], onDelete: SetNull)
+  messages         Message[]
+  cost_audits      SessionCostAudit[]
+
+  @@index([created_at])
+  @@index([organization_id, created_at])
+  @@index([external_user_id, created_at])
+  @@index([bot_id, created_at])
+  @@map("sessions")
+}
+
+enum Role {
+  user
+  assistant
+  system
+}
+
+model Message {
+  id         String    @id @default(uuid())
+  session_id String?
+  role       Role
+  content    String
+  images     Json?     // Storing [{mime_type, data_url}]
+  tokens_in  Int?      @default(0)
+  tokens_out Int?      @default(0)
+  cost_usd   Float?    @default(0)
+  created_at DateTime? @default(now())
+  session    Session?  @relation(fields: [session_id], references: [id], onDelete: Cascade)
+
+  @@index([session_id, created_at])
+  @@map("messages")
+}
+
+enum SessionCostScope {
+  CHAT
+  TTS
+  EVALUATION
+}
+
+model SessionCostAudit {
+  id               String           @id @default(uuid())
+  session_id       String
+  scope            SessionCostScope
+  model            String
+  provider         String?
+  tokens_in        Int              @default(0)
+  tokens_out       Int              @default(0)
+  estimated_tokens Int              @default(0)
+  messages         Int              @default(0)
+  events           Int              @default(0)
+  cost_usd         Float            @default(0)
+  created_at       DateTime         @default(now())
+  updated_at       DateTime         @updatedAt
+
+  session Session @relation(fields: [session_id], references: [id], onDelete: Cascade)
+
+  @@unique([session_id, scope, model])
+  @@index([session_id])
+  @@index([session_id, scope])
+  @@map("session_cost_audits")
+}
+
+model PricingConfig {
+  id                       String   @id @default(uuid())
+  model_name               String   @unique
+  input_price_per_million  Float
+  output_price_per_million Float
+  updated_at               DateTime @updatedAt
+
+  @@map("pricing_config")
+}
+
+enum QaCaseCategory {
+  FUNCTIONAL
+  EDGE
+  SECURITY
+  REGRESSION
+}
+
+enum QaSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum QaJudgeMode {
+  DETERMINISTIC
+  LLM
+}
+
+enum QaRunStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum QaResultStatus {
+  PENDING
+  RUNNING
+  PASS
+  FAIL
+  ERROR
+  SKIPPED
+}
+
+enum QaGateStatus {
+  PENDING
+  PASSED
+  FAILED
+}
+
+model QaSuite {
+  id             String   @id @default(uuid())
+  name           String
+  description    String?
+  bot_type_scope String?
+  enabled        Boolean  @default(true)
+  gate_config    Json
+  run_config     Json
+  created_by     String?
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  creator AppUser? @relation(fields: [created_by], references: [id], onDelete: SetNull)
+  cases   QaCase[]
+  runs    QaRun[]
+
+  @@index([enabled])
+  @@index([bot_type_scope])
+  @@index([created_by])
+  @@map("qa_suites")
+}
+
+model QaCase {
+  id             String         @id @default(uuid())
+  suite_id       String
+  name           String
+  description    String?
+  category       QaCaseCategory @default(FUNCTIONAL)
+  severity       QaSeverity     @default(MEDIUM)
+  enabled        Boolean        @default(true)
+  input_messages Json
+  expected_rules Json
+  judge_mode     QaJudgeMode    @default(DETERMINISTIC)
+  judge_prompt   String?
+  repeat_count   Int            @default(1)
+  max_retries    Int            @default(2)
+  tags           Json?
+  created_at     DateTime       @default(now())
+  updated_at     DateTime       @updatedAt
+
+  suite   QaSuite    @relation(fields: [suite_id], references: [id], onDelete: Cascade)
+  results QaResult[]
+
+  @@index([suite_id])
+  @@index([enabled])
+  @@index([category, severity])
+  @@map("qa_cases")
+}
+
+model QaRun {
+  id              String       @id @default(uuid())
+  suite_id        String
+  bot_id          String
+  created_by      String
+  status          QaRunStatus  @default(PENDING)
+  gate_status     QaGateStatus @default(PENDING)
+  config_snapshot Json
+  metrics         Json?
+  summary         Json?
+  error_message   String?
+  started_at      DateTime?
+  completed_at    DateTime?
+  created_at      DateTime     @default(now())
+  updated_at      DateTime     @updatedAt
+
+  suite     QaSuite      @relation(fields: [suite_id], references: [id], onDelete: Cascade)
+  bot       Bot          @relation(fields: [bot_id], references: [id], onDelete: Cascade)
+  creator   AppUser      @relation(fields: [created_by], references: [id], onDelete: Cascade)
+  results   QaResult[]
+  artifacts QaArtifact[]
+
+  @@index([suite_id])
+  @@index([bot_id])
+  @@index([created_by])
+  @@index([status, created_at])
+  @@index([gate_status])
+  @@map("qa_runs")
+}
+
+model QaResult {
+  id                String         @id @default(uuid())
+  run_id            String
+  case_id           String
+  status            QaResultStatus @default(PENDING)
+  passed            Boolean?
+  score             Float?
+  latency_ms        Int?
+  tokens_in         Int?
+  tokens_out        Int?
+  cost_usd          Float?
+  response_excerpt  String?
+  response_full     String?
+  attempts          Json?
+  security_findings Json?
+  eval_details      Json?
+  error_message     String?
+  created_at        DateTime       @default(now())
+  updated_at        DateTime       @updatedAt
+
+  run  QaRun  @relation(fields: [run_id], references: [id], onDelete: Cascade)
+  case QaCase @relation(fields: [case_id], references: [id], onDelete: Cascade)
+
+  @@unique([run_id, case_id])
+  @@index([run_id, status])
+  @@index([case_id])
+  @@map("qa_results")
+}
+
+model QaArtifact {
+  id         String   @id @default(uuid())
+  run_id     String
+  format     String
+  payload    String
+  created_at DateTime @default(now())
+
+  run QaRun @relation(fields: [run_id], references: [id], onDelete: Cascade)
+
+  @@index([run_id, format])
+  @@map("qa_artifacts")
+}
+
+model TtsConfig {
+  id            String   @id @default(uuid())
+  provider      String   @default("openai")
+  model         String   @default("gpt-4o-audio-preview")
+  default_speed Float    @default(1.0)
+  voice_rules   String? // Global instructions for voice behavior
+  openai_api_key String? // Encrypted OpenAI API Key
+  updated_at    DateTime @updatedAt
+
+  @@map("tts_config")
+}
+
+model QaLabConfig {
+  id                 String   @id @default(uuid())
+  scope              String   @unique @default("default")
+  evals_enabled      Boolean  @default(false)
+  evals_auto_create  Boolean  @default(true)
+  evals_name_prefix  String   @default("QA Lab")
+  evals_eval_id      String?
+  openai_api_key     String? // Encrypted OpenAI API Key for QA Lab (LLM judge + Evals)
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  @@map("qa_lab_config")
+}

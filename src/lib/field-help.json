@@ -1,0 +1,32 @@
+{
+    "es": {
+        "name": "El nombre identificador de tu bot. Aparece en la lista de bots y en el header del chat. Ejemplo: 'Simulador estación de servicio - Cliente' o 'Examinador Seguridad Industrial'.",
+        "bot_type": "🎭 SIMULATOR: Roleplay (el bot actúa como cliente/paciente/empleado para entrenar usuarios)\n📋 EXAMINER: Examinador guiado (Q&A/Examen con banco de preguntas y feedback por respuesta)\n🔍 DETECTOR: Análisis de situaciones con veredicto semáforo (verde/amarillo/rojo)\n🤖 GENERIC: Asistente conversacional general sin rol específico",
+        "api_key": "⚠️ OBLIGATORIA - Tu clave de OpenAI que empieza con 'sk-'. Cada bot usa su propia clave para facturación separada. Conseguila en: platform.openai.com/api-keys",
+        "openai_prompt_id": "Prompt gestionado de OpenAI (formato pmpt_xxxxx). Si está lleno, el bot puede usar Responses API con ese prompt. Si está vacío, no usa prompt gestionado.",
+        "llm_model": "Modelo base obligatorio para ejecutar el bot (por ejemplo gpt-4o o gpt-4o-mini). Se usa en Chat Completions y Responses API. Si falta, el runtime se bloquea.",
+        "openai_vector_store_id": "ID del Vector Store de OpenAI (formato: vs_xxxxx). Usalo si querés que el bot consulte documentos (PDFs, manuales, etc.) mediante RAG. Si no usás RAG, dejalo vacío.",
+        "rag_config": "Control visual de RAG: Modo (Nunca/Siempre/Por paso/Solo evaluación), Motor (Wrapper o Platform), Vector Stores y evidencia estricta. En avanzado configurás strategy/fallback/threshold/cache y auditoría. Si el modo no es 'Nunca', necesitás al menos un Vector Store válido.",
+        "instructions_prefix": "📝 EL CAMPO MÁS IMPORTANTE - Acá definís QUIÉN es el bot y CÓMO debe comportarse. Incluí:\n• Rol del bot (ej: 'Sos un cliente en una estación de servicio')\n• Rol del usuario (ej: 'El usuario es el vendedor')\n• Reglas duras (lo que NUNCA debe hacer)\n• Terminología específica del contexto\n• Variables de sesión entre {llaves}",
+        "bypass_logic": "Respuestas automáticas sin usar IA. Usá expresiones regulares (regex) para detectar frases exactas y responder instantáneamente. Ejemplo: si el usuario pregunta '¿cómo pagás?', responder siempre 'Con la app'. Ahorra tokens y garantiza consistencia.",
+        "scenarios": "Datos de contexto en formato JSON: arquetipos de personalidad, vehículos, productos, días de la semana, etc. El sistema elige valores aleatorios al iniciar cada sesión.",
+        "tools": "Funciones que el bot puede ejecutar (formato JSON). Ejemplo: verificar stock, enviar email, consultar base de datos. Dejalo vacío [] si no necesitás function calling.",
+        "metadata": "Información adicional que se guarda con el bot pero no afecta su comportamiento directamente. Útil para versiones, descripciones internas, IDs de referencia, etc.",
+        "prompt_version": "Versión del prompt gestionado en OpenAI. Por defecto es '1'. Solo relevante si usás Managed Prompts con versionado."
+    },
+    "en": {
+        "name": "Your bot's identifier name. Shows in the bot list and chat header. Example: 'Gas Station Simulator - Customer' or 'Safety Examiner'.",
+        "bot_type": "🎭 SIMULATOR: Roleplay (bot acts as customer/patient/employee to train users)\n📋 EXAMINER: Guided examiner (Q&A/Exam with question bank and per-answer feedback)\n🔍 DETECTOR: Situation analysis with traffic-light verdict (green/yellow/red)\n🤖 GENERIC: General conversational assistant without specific role",
+        "api_key": "⚠️ MANDATORY - Your OpenAI key starting with 'sk-'. Each bot uses its own key for separate billing. Get it at: platform.openai.com/api-keys",
+        "openai_prompt_id": "Managed OpenAI prompt ID (format pmpt_xxxxx). When set, the bot can use Responses API with that prompt. If empty, no managed prompt is used.",
+        "llm_model": "Required base model used to run the bot (for example gpt-4o or gpt-4o-mini). It is used by Chat Completions and Responses API. Runtime fails closed if missing.",
+        "openai_vector_store_id": "OpenAI Vector Store ID (format: vs_xxxxx). Use if you want the bot to query documents (PDFs, manuals, etc.) via RAG. If not using RAG, leave empty.",
+        "rag_config": "Visual RAG control: Mode (Never/Always/By step/Evaluation only), Owner (Wrapper or Platform), Vector Stores, and strict evidence. Advanced section includes strategy/fallback/threshold/cache and audit flags. Any non-Never mode requires at least one valid Vector Store.",
+        "instructions_prefix": "📝 THE MOST IMPORTANT FIELD - Here you define WHO the bot is and HOW it should behave. Include:\n• Bot's role (e.g., 'You are a customer at a gas station')\n• User's role (e.g., 'The user is the salesperson')\n• Hard rules (what it must NEVER do)\n• Context-specific terminology\n• Session variables in {braces}",
+        "bypass_logic": "Automatic responses without AI. Use regex to detect exact phrases and respond instantly. Example: if user asks 'how do you pay?', always respond 'With the App'. Saves tokens and ensures consistency.",
+        "scenarios": "Context data in JSON format: personality archetypes, vehicles, products, days of week, etc. System picks random values when starting each session.",
+        "tools": "Functions the bot can execute (JSON format). Example: check stock, send email, query database. Leave empty [] if you don't need function calling.",
+        "metadata": "Additional info stored with the bot but doesn't directly affect behavior. Useful for versions, internal descriptions, reference IDs, etc.",
+        "prompt_version": "Version of the managed prompt in OpenAI. Defaults to '1'. Only relevant if using versioned Managed Prompts."
+    }
+}
