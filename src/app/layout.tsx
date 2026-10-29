@@ -11,7 +11,7 @@ const sourceSans = Source_Sans_3({
 });
 
 export const metadata: Metadata = {
-    title: "AI Simulator SaaS",
+    title: "Simulator Hub",
     description: "Stateless Multi-tenant AI SaaS",
 };
 

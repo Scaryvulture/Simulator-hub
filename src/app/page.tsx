@@ -1,4 +1,4 @@
-import { LogOut, MessageSquare, Settings, UserCircle } from 'lucide-react';
+import { GraduationCap, LogOut, MessageSquare, Settings, UserCircle } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { redirect } from 'next/navigation';
@@ -115,7 +115,7 @@ export default async function HomePage() {
                 <div className="workspace-shell flex min-h-16 flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-3">
                         <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
-                            <Image src="/logo.svg" alt="Logo" width={28} height={28} className="h-7 w-7 object-contain" />
+                            <Image src="/logo.svg" alt="" width={28} height={28} className="h-7 w-7 object-contain" />
                         </div>
                         <div className="min-w-0">
                             <p className="workspace-eyebrow">Simulator Hub</p>
@@ -225,7 +225,7 @@ export default async function HomePage() {
                 {bots.length === 0 ? (
                     <div className="workspace-empty-state mt-8">
                         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
-                            <Image src="/icons/assistant.svg" alt="Brand icon" width={28} height={28} className="h-7 w-7 object-contain opacity-70" />
+                            <GraduationCap className="h-7 w-7 text-slate-400" aria-hidden="true" />
                         </div>
                         <h2 className="mt-5 text-xl font-black text-slate-900">
                             <I18nText es="Aún no tenés simuladores asignados" en="You do not have assigned simulators yet" />

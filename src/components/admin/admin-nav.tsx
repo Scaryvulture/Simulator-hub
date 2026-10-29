@@ -30,13 +30,10 @@ export function AdminNav({ role, hasOrgAdminAccess }: Props) {
             <nav className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/95">
                 <div className="mx-auto flex h-14 w-full items-center justify-between gap-3 px-4 md:px-6">
                     <Link href={homeHref} prefetch={false} className="flex shrink-0 items-center gap-4">
-                        <Image
-                            src="/logo.svg"
-                            alt="Simulator Hub"
-                            width={128}
-                            height={34}
-                            className="object-contain"
-                        />
+                        <span className="flex items-center gap-2">
+                            <Image src="/logo.svg" alt="" width={28} height={28} />
+                            <span className="text-sm font-black tracking-tight text-slate-900">Simulator Hub</span>
+                        </span>
                         <div className="hidden min-w-0 border-l border-slate-200 pl-4 md:block">
                             <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-500">
                                 {lang === 'es' ? 'Administración' : 'Administration'}
