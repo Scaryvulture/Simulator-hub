@@ -1,5 +1,6 @@
 import 'server-only';
 
+import prisma from './prisma';
 import { notFound, redirect } from 'next/navigation';
 
 import { getChatBot } from '@/app/actions/bots';
@@ -44,7 +45,13 @@ export async function loadChatPageContext(params: LoadChatPageContextParams) {
         notFound();
     }
 
+    const memberships = currentUser.ltiAccessScope ? [] : await prisma.organizationMember.findMany({
+        where: { user_id: currentUser.userId, organization: { bots: { some: { bot_id: params.botId } } } },
+        select: { organization: { select: { id: true, name: true } } },
+        orderBy: { organization: { name: 'asc' } },
+    });
     return {
+        organizations: memberships.map((membership) => membership.organization),
         currentUser,
         bot,
         viewerRole: getViewerRole(currentUser),

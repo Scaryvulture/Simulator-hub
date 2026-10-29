@@ -1,10 +1,8 @@
-
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Check, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-// import { EvaluatorQuestion } from '@/lib/schemas/bot-config'; // Not exported there
 
 export interface EvaluatorQuestion {
     id: string;
@@ -33,6 +31,13 @@ export const QuestionPoolPicker = (props: QuestionPoolPickerProps) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [topicFilter, setTopicFilter] = useState<string>('all');
 
+    useEffect(() => {
+        if (!isOpen) return;
+        setSelectedIds(initialIds);
+        setSearchTerm('');
+        setTopicFilter('all');
+    }, [initialIds, isOpen]);
+
     if (!isOpen) return null;
 
     const filtered = questions.filter(q => {
@@ -51,9 +56,9 @@ export const QuestionPoolPicker = (props: QuestionPoolPickerProps) => {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col border border-slate-200 dark:border-slate-800">
+            <div className="flex max-h-[80vh] w-full max-w-2xl flex-col rounded-[1.5rem] border border-slate-200 bg-white shadow-2xl">
                 <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-                    <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100">
+                    <h3 className="text-lg font-bold text-slate-800">
                         {lang === 'es'
                             ? (mode === 'single' ? 'Seleccionar Pregunta' : 'Seleccionar Pool de Preguntas')
                             : (mode === 'single' ? 'Select Question' : 'Select Question Pool')}
@@ -69,7 +74,7 @@ export const QuestionPoolPicker = (props: QuestionPoolPickerProps) => {
                         onChange={e => setSearchTerm(e.target.value)}
                     />
                     <select
-                        className="h-9 border rounded px-2 text-sm max-w-[150px] bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100"
+                        className="h-9 max-w-[150px] rounded border border-slate-200 bg-white px-2 text-sm text-slate-800"
                         value={topicFilter}
                         onChange={e => setTopicFilter(e.target.value)}
                     >
@@ -84,10 +89,10 @@ export const QuestionPoolPicker = (props: QuestionPoolPickerProps) => {
                         return (
                             <div
                                 key={q.id}
-                                className={`flex items-start gap-3 p-2 rounded cursor-pointer transition-colors ${isSelected ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800 border' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 border border-transparent'}`}
+                                className={`flex items-start gap-3 rounded border p-2 transition-colors cursor-pointer ${isSelected ? 'border-purple-200 bg-purple-50' : 'border-transparent hover:bg-slate-50'}`}
                                 onClick={() => toggleId(q.id)}
                             >
-                                <div className={`mt-1 w-4 h-4 rounded border flex items-center justify-center ${isSelected ? 'bg-purple-600 border-purple-600' : 'border-slate-300 dark:border-slate-600'}`}>
+                                <div className={`mt-1 flex h-4 w-4 items-center justify-center rounded border ${isSelected ? 'border-purple-600 bg-purple-600' : 'border-slate-300'}`}>
                                     {isSelected && <Check className="h-3 w-3 text-white" />}
                                 </div>
                                 <div className="flex-1 min-w-0">
@@ -95,7 +100,7 @@ export const QuestionPoolPicker = (props: QuestionPoolPickerProps) => {
                                         <Badge variant="outline" className="text-[10px] py-0 h-4">{q.topic}</Badge>
                                         <span className="text-xs text-slate-400 font-mono">{q.id}</span>
                                     </div>
-                                    <p className="text-sm text-slate-700 dark:text-slate-300 line-clamp-2">{q.question}</p>
+                                    <p className="line-clamp-2 text-sm text-slate-700">{q.question}</p>
                                 </div>
                             </div>
                         )
@@ -107,7 +112,7 @@ export const QuestionPoolPicker = (props: QuestionPoolPickerProps) => {
                     )}
                 </div>
 
-                <div className="p-4 border-t border-slate-100 bg-slate-50 dark:bg-slate-800/50 rounded-b-xl flex justify-between items-center">
+                <div className="flex items-center justify-between rounded-b-[1.5rem] border-t border-slate-100 bg-slate-50 p-4">
                     <span className="text-xs text-slate-500">
                         {selectedIds.length} {lang === 'es' ? 'seleccionadas' : 'selected'}
                     </span>

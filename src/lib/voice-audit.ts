@@ -14,6 +14,7 @@ export type VoiceAuditEvent = {
     estimated_tokens: number;
     cost_usd: number;
     latency_ms?: number;
+    cost_source?: 'provider_duration' | 'server_estimate';
 };
 
 type VoiceAuditTotals = {
@@ -63,10 +64,12 @@ export async function appendVoiceAuditEvent(sessionId: string, event: VoiceAudit
         },
     });
 
-    if (event.channel.includes('tts')) {
+    {
         await incrementSessionCostAudit({
             sessionId,
-            scope: SessionCostScope.TTS,
+            // STT is part of chat input; provider distinguishes it from text generation.
+            scope: event.channel.includes('tts') ? SessionCostScope.TTS : SessionCostScope.CHAT,
+            provider: event.channel.includes('tts') ? 'openai_tts' : 'openai_stt',
             model: event.model,
             estimatedTokens: event.estimated_tokens,
             events: 1,

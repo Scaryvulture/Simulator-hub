@@ -12,17 +12,18 @@ export default async function LtiChatPage({ params, searchParams }: Props) {
     const { new: forceNew } = await searchParams;
     const forceNewSession = forceNew === 'true';
 
-    const { currentUser, bot, viewerRole } = await loadChatPageContext({
+    const { currentUser, bot, viewerRole, organizations } = await loadChatPageContext({
         botId,
         routeMode: 'lti_embedded',
         forceNewSession,
     });
 
     return (
-        <div className="h-dvh w-full overflow-hidden bg-background/90 p-2 sm:p-3">
+        <div className="workspace-canvas h-dvh min-h-0 w-full overflow-hidden p-2 sm:p-3">
             <main className="h-full w-full overflow-hidden">
                 <ChatInterface
                     bot={bot}
+                    organizations={organizations}
                     userId={currentUser.userId}
                     viewerRole={viewerRole}
                     requireAuth

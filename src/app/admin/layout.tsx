@@ -18,15 +18,15 @@ export default async function AdminLayout({
     }
 
     return (
-        <div className="min-h-screen bg-background">
+        <div className="min-h-screen bg-[linear-gradient(180deg,#fbfcff_0%,#f2f5f9_42%,#f8fafc_100%)]">
             <AdminNav role={currentUser.role} hasOrgAdminAccess={currentUser.hasOrgAdminAccess} />
-            <div className="w-full py-4 px-3 md:px-4 lg:px-5">
-                <div className="grid grid-cols-1 md:grid-cols-[208px_minmax(0,1fr)] gap-4 md:gap-5">
-                    <AdminSidebar role={currentUser.role} hasOrgAdminAccess={currentUser.hasOrgAdminAccess} />
-                    <main className="min-w-0">
+            <div className="admin-shell">
+                <AdminSidebar role={currentUser.role} hasOrgAdminAccess={currentUser.hasOrgAdminAccess} />
+                <main className="admin-workspace">
+                    <div className="admin-workspace-shell">
                         {children}
-                    </main>
-                </div>
+                    </div>
+                </main>
             </div>
         </div>
     );

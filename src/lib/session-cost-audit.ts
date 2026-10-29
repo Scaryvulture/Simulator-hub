@@ -1,6 +1,7 @@
 import 'server-only';
 import prisma from '@/lib/prisma';
-import { SessionCostScope } from '@prisma/client';
+import { SessionCostScope, type Prisma } from '@prisma/client';
+import { currentSessionOperation } from './session-operation-context';
 
 type IncrementSessionCostAuditParams = {
     sessionId: string;
@@ -57,7 +58,7 @@ export async function incrementSessionCostAudit(params: IncrementSessionCostAudi
         cost_usd: { increment: costUsd },
     };
 
-    await prisma.sessionCostAudit.upsert({
+    const write = (tx: Prisma.TransactionClient) => tx.sessionCostAudit.upsert({
         where: {
             session_id_scope_model: {
                 session_id: params.sessionId,
@@ -68,5 +69,8 @@ export async function incrementSessionCostAudit(params: IncrementSessionCostAudi
         create: dataForCreate,
         update: dataForUpdate,
     });
+    const operation = currentSessionOperation(params.sessionId);
+    if (operation) operation.costWrites.push(write);
+    else await write(prisma);
 }
 

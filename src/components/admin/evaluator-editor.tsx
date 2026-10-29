@@ -4,19 +4,20 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { updateBot } from '@/app/actions/bots';
 import { toast } from 'sonner';
-import { ArrowLeft, Save, Plus, Trash, CheckCircle2, MessageSquareText, ShieldCheck, Database, Key, Eye, EyeOff, Copy } from 'lucide-react';
+import { ArrowLeft, Save, CheckCircle2, MessageSquareText, ShieldCheck, Database, Key, Eye, EyeOff, Copy } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLanguage } from '@/components/providers/i18n-context';
 import { v4 as uuidv4 } from 'uuid';
 import { VersionManager } from './version-manager';
 import { normalizeRagConfig } from '@/lib/rag-config';
-import { HelpTooltip } from '@/components/admin/help-tooltip';
 import { useUnsavedChangesWarning } from '@/lib/use-unsaved-changes-warning';
 import { buildFlowWarningDescription } from '@/lib/flow-lint-feedback';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
+import { AdminPanel } from '@/components/admin/admin-panel';
+import { EvaluatorCriteriaSection } from '@/components/admin/evaluator-criteria-section';
 
 interface Criterion {
     id: string;
@@ -58,7 +59,7 @@ const defaultRagConfig = {
         store_queries: true,
         store_scores: true,
     },
-    // Legacy mirror fields
+    // Legacy top-level mirrors for older saved configs.
     top_k: 8,
     fallback_strategy: 'none',
     metadata_filters: {} as Record<string, string | number | boolean>,
@@ -317,7 +318,7 @@ export function EvaluatorEditor({ bot }: Props) {
                     audit: {
                         ...normalized.audit,
                     },
-                    // Legacy mirror fields
+                    // Legacy top-level mirrors for older saved configs.
                     top_k: normalized.wrapper.top_k,
                     fallback_strategy: normalized.wrapper.fallback,
                     metadata_filters: normalized.wrapper.metadata_filters,
@@ -333,7 +334,6 @@ export function EvaluatorEditor({ bot }: Props) {
                 openai_vector_store_id: normalized.vector_store_ids[0] || '',
                 prompt_version: promptVersion,
                 config: configToSave,
-                published: true,
             };
             if (shouldPersistApiKey) {
                 payload.api_key = normalizedApiKey;
@@ -469,287 +469,313 @@ export function EvaluatorEditor({ bot }: Props) {
 
     return (
         <div className="space-y-6 pb-20 animate-in fade-in duration-700">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center space-x-4">
-                    <Link href="/admin/evaluators">
-                        <Button variant="ghost" size="icon" className="group rounded-full bg-slate-100 hover:bg-slate-200 transition-all border border-slate-200">
-                            <ArrowLeft className="h-5 w-5 group-hover:-translate-x-0.5 transition-transform text-slate-600" />
-                        </Button>
-                    </Link>
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-[9px] font-black text-slate-500 uppercase tracking-widest border border-slate-200">
-                                EVALUATOR
+            <AdminPageHeader
+                variant="evaluator"
+                eyebrow={lang === 'es' ? 'Editor de evaluador' : 'Evaluator editor'}
+                title={(
+                    <div className="flex flex-wrap items-center gap-3">
+                        <span>{name || (lang === 'es' ? 'Evaluador #1' : 'Evaluator #1')}</span>
+                        <span className="admin-editor-chip">EVALUATOR</span>
+                        {hasUnsavedChanges ? (
+                            <span className="admin-editor-chip border-amber-200 bg-amber-50 text-amber-700">
+                                {lang === 'es' ? 'Cambios pendientes' : 'Pending changes'}
                             </span>
-                        </div>
-                        <h1 className="text-3xl font-black tracking-tighter text-slate-900">
-                            {name || (lang === 'es' ? 'Evaluador #1' : 'Evaluator #1')}
-                        </h1>
+                        ) : null}
                     </div>
+                )}
+                description={lang === 'es'
+                    ? 'Criterios, RAG y guardado del evaluador.'
+                    : 'Criteria, RAG and evaluator persistence.'}
+                actions={(
+                    <>
+                        <Button asChild variant="outline" className="h-11 rounded-2xl border-slate-200 font-bold">
+                            <Link href="/admin/evaluators">
+                                <ArrowLeft className="mr-2 h-4 w-4" />
+                                {lang === 'es' ? 'Volver' : 'Back'}
+                            </Link>
+                        </Button>
+                        <Button onClick={handleSave} disabled={isSaving} className="h-11 rounded-2xl px-5 text-sm font-bold shadow-sm">
+                            <Save className="mr-2 h-4 w-4" />
+                            {isSaving ? (lang === 'es' ? 'Guardando...' : 'Saving...') : (lang === 'es' ? 'Guardar borrador' : 'Save draft')}
+                        </Button>
+                    </>
+                )}
+            />
+
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.95fr)]">
+                <div className="space-y-6">
+                    <EvaluatorCriteriaSection
+                        lang={lang}
+                        type="boolean"
+                        title={lang === 'es' ? 'Criterios booleanos' : 'Boolean criteria'}
+                        description={lang === 'es'
+                            ? 'Checklist objetivo para cumplimiento o incumplimiento.'
+                            : 'Objective checklist for pass or fail decisions.'}
+                        emptyLabel={lang === 'es' ? 'Todavia no hay criterios booleanos.' : 'No boolean criteria yet.'}
+                        addLabel={lang === 'es' ? 'Agregar criterio' : 'Add criterion'}
+                        icon={<CheckCircle2 className="h-5 w-5 text-primary" />}
+                        criteria={config.criteria.boolean}
+                        titlePlaceholder={lang === 'es' ? 'Ej. Saludo inicial' : 'e.g. Initial greeting'}
+                        instructionPlaceholder={lang === 'es' ? 'Evalua si el usuario saludo con cortesia y dentro del momento esperado.' : 'Evaluate whether the user greeted politely and at the expected time.'}
+                        onAdd={() => addCriterion('boolean')}
+                        onRemove={(id) => removeCriterion('boolean', id)}
+                        onUpdate={(id, field, value) => updateCriterion('boolean', id, field, value)}
+                    />
+
+                    <EvaluatorCriteriaSection
+                        lang={lang}
+                        type="qualitative"
+                        title={lang === 'es' ? 'Criterios cualitativos' : 'Qualitative criteria'}
+                        description={lang === 'es'
+                            ? 'Observaciones y matices para feedback detallado.'
+                            : 'Observations and nuance for detailed feedback.'}
+                        emptyLabel={lang === 'es' ? 'Todavia no hay criterios cualitativos.' : 'No qualitative criteria yet.'}
+                        addLabel={lang === 'es' ? 'Agregar criterio' : 'Add criterion'}
+                        icon={<MessageSquareText className="h-5 w-5 text-primary" />}
+                        criteria={config.criteria.qualitative}
+                        titlePlaceholder={lang === 'es' ? 'Ej. Tono de voz' : 'e.g. Tone of voice'}
+                        instructionPlaceholder={lang === 'es' ? 'Analiza si el tono fue profesional, claro y consistente durante la sesion.' : 'Analyze whether the tone stayed professional, clear, and consistent during the session.'}
+                        onAdd={() => addCriterion('qualitative')}
+                        onRemove={(id) => removeCriterion('qualitative', id)}
+                        onUpdate={(id, field, value) => updateCriterion('qualitative', id, field, value)}
+                    />
                 </div>
 
-                <div className="flex items-center gap-3">
-                    {hasUnsavedChanges && (
-                        <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">
-                            {lang === 'es' ? 'Cambios sin guardar' : 'Unsaved changes'}
-                        </span>
-                    )}
-                    <Button onClick={handleSave} disabled={isSaving} className="bg-primary hover:bg-primary/90 text-white shadow-xl shadow-primary/20 group h-12 px-10 rounded-xl transition-all font-black text-xs">
-                        {isSaving ? (lang === 'es' ? 'Guardando...' : 'Saving...') : <><Save className="mr-2 h-5 w-5 group-hover:scale-110 transition-transform" /> {lang === 'es' ? 'Guardar Evaluador' : 'Save Evaluator'}</>}
-                    </Button>
-                </div>
-            </div>
+                <div className="space-y-6">
+                    <AdminPanel
+                        variant="section"
+                        title={(
+                            <span className="flex items-center gap-2">
+                                <Key className="h-5 w-5 text-primary" />
+                                {lang === 'es' ? 'Identidad y acceso' : 'Identity and access'}
+                            </span>
+                        )}
+                        description={lang === 'es'
+                            ? 'Nombre, credenciales y modelo base del evaluador.'
+                            : 'Name, credentials, and base model for the evaluator.'}
+                        contentClassName="space-y-5"
+                    >
+                        <div className="space-y-2">
+                            <Label className="admin-editor-label">{lang === 'es' ? 'Nombre' : 'Name'}</Label>
+                            <Input
+                                value={name}
+                                onChange={(event) => setName(event.target.value)}
+                                className="h-11 rounded-xl border-slate-200 bg-slate-50 font-semibold text-slate-900"
+                            />
+                        </div>
 
-            <div className="grid gap-6 lg:grid-cols-3">
-                <div className="space-y-6 lg:col-span-1">
-                    <Card className="bg-white shadow-sm border-slate-200 overflow-hidden rounded-3xl group transition-all">
-                        <CardHeader className="bg-slate-50 border-b border-slate-100 py-5">
-                            <CardTitle className="flex items-center gap-2 text-base font-black text-slate-900">
-                                <Key className="h-5 w-5 text-primary" /> {lang === 'es' ? 'Identidad & API' : 'Identity & API'}
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-5 pt-7">
-                            <div className="space-y-2">
-                                <Label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em]">
-                                    {lang === 'es' ? 'NOMBRE' : 'NAME'}
-                                </Label>
+                        <div className="space-y-2">
+                            <Label className="admin-editor-label">OpenAI API key</Label>
+                            <div className="relative">
                                 <Input
-                                    value={name}
-                                    onChange={e => setName(e.target.value)}
-                                    className="bg-slate-50 border-slate-200 h-12 rounded-xl text-slate-900 font-bold"
+                                    type={showApiKey ? 'text' : 'password'}
+                                    value={apiKey}
+                                    onChange={(event) => {
+                                        setApiKey(event.target.value);
+                                        setApiKeyChanged(true);
+                                    }}
+                                    autoComplete="off"
+                                    autoCorrect="off"
+                                    autoCapitalize="none"
+                                    spellCheck={false}
+                                    placeholder={hasStoredApiKey
+                                        ? (apiKeyDisplay || (lang === 'es' ? 'Guardada (oculta)' : 'Saved (hidden)'))
+                                        : 'sk-...'}
+                                    className="h-11 rounded-xl border-slate-200 bg-slate-50 pr-20 font-mono text-slate-900"
                                 />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowApiKey((previous) => !previous)}
+                                    className="absolute right-10 top-3 text-slate-400 hover:text-slate-600 focus:outline-none"
+                                    aria-label={showApiKey
+                                        ? (lang === 'es' ? 'Ocultar API key' : 'Hide API key')
+                                        : (lang === 'es' ? 'Mostrar API key' : 'Show API key')}
+                                >
+                                    {showApiKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                </button>
+                                <ShieldCheck className="absolute right-3 top-3.5 h-5 w-5 text-slate-300" />
                             </div>
-                            <div className="space-y-2">
-                                <Label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em]">
-                                    OPENAI API KEY
-                                </Label>
-                                <div className="relative">
-                                    <Input
-                                        type={showApiKey ? 'text' : 'password'}
-                                        value={apiKey}
-                                        onChange={e => {
-                                            setApiKey(e.target.value);
-                                            setApiKeyChanged(true);
-                                        }}
-                                        autoComplete="off"
-                                        autoCorrect="off"
-                                        autoCapitalize="none"
-                                        spellCheck={false}
-                                        placeholder={hasStoredApiKey
-                                            ? (apiKeyDisplay || (lang === 'es' ? 'Guardada (oculta)' : 'Saved (hidden)'))
-                                            : 'sk-...'}
-                                        className="bg-slate-50 border-slate-200 h-12 rounded-xl font-mono text-slate-900 pr-20"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowApiKey(prev => !prev)}
-                                        className="absolute right-10 top-3 text-slate-400 hover:text-slate-600 focus:outline-none"
-                                        aria-label={showApiKey
-                                            ? (lang === 'es' ? 'Ocultar API key' : 'Hide API key')
-                                            : (lang === 'es' ? 'Mostrar API key' : 'Show API key')}
-                                    >
-                                        {showApiKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                                    </button>
-                                    <ShieldCheck className="absolute right-3 top-3.5 h-5 w-5 text-slate-300" />
-                                </div>
-                                <div className="flex gap-2">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        className="h-8 text-[10px]"
-                                        disabled={!hasStoredApiKey || isRevealingApiKey}
-                                        onClick={handleRevealApiKey}
-                                    >
-                                        <Eye className="h-3.5 w-3.5 mr-1" />
-                                        {lang === 'es' ? 'Revelar' : 'Reveal'}
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        className="h-8 text-[10px]"
-                                        disabled={isRevealingApiKey || (!hasStoredApiKey && !apiKey)}
-                                        onClick={handleCopyApiKey}
-                                    >
-                                        <Copy className="h-3.5 w-3.5 mr-1" />
-                                        Copy
-                                    </Button>
-                                </div>
-                                {!isApiKeyValid && (
-                                    <p className="text-[10px] text-red-500">
-                                        {lang === 'es' ? 'La API key debe comenzar con "sk-".' : 'API key must start with "sk-".'}
-                                    </p>
-                                )}
+                            <div className="flex gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 rounded-xl border-slate-200 text-[11px] font-semibold"
+                                    disabled={!hasStoredApiKey || isRevealingApiKey}
+                                    onClick={handleRevealApiKey}
+                                >
+                                    <Eye className="mr-1 h-3.5 w-3.5" />
+                                    {lang === 'es' ? 'Revelar' : 'Reveal'}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 rounded-xl border-slate-200 text-[11px] font-semibold"
+                                    disabled={isRevealingApiKey || (!hasStoredApiKey && !apiKey)}
+                                    onClick={handleCopyApiKey}
+                                >
+                                    <Copy className="mr-1 h-3.5 w-3.5" />
+                                    Copy
+                                </Button>
                             </div>
-                            <div className="space-y-2">
-                                <Label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em]">
-                                    {lang === 'es' ? 'PROMPT ID' : 'PROMPT ID'}
-                                </Label>
-                                <Input
-                                    value={promptId}
-                                    onChange={e => setPromptId(e.target.value)}
-                                    placeholder="pmpt_xxxxx"
-                                    className="bg-slate-50 border-slate-200 h-11 rounded-xl font-mono text-xs text-slate-600"
-                                />
-                                {!isPromptIdValid && (
-                                    <p className="text-[10px] text-red-500">
-                                        {lang === 'es' ? 'Debe iniciar con pmpt_ o quedar vacío.' : 'Must start with pmpt_ or be empty.'}
-                                    </p>
-                                )}
-                                <p className="text-[10px] text-slate-400">
-                                    {lang === 'es'
-                                        ? 'Si usas pmpt_* se ejecuta Responses API con prompt gestionado.'
-                                        : 'Using pmpt_* triggers Responses API with managed prompt.'}
+                            {!isApiKeyValid ? (
+                                <p className="text-[11px] text-red-500">
+                                    {lang === 'es' ? 'La API key debe comenzar con "sk-".' : 'API key must start with "sk-".'}
                                 </p>
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em]">
-                                    {lang === 'es' ? 'MODELO' : 'MODEL'}
-                                </Label>
-                                <Input
-                                    value={modelName}
-                                    onChange={e => setModelName(e.target.value)}
-                                    placeholder="gpt-4o"
-                                    className="bg-slate-50 border-slate-200 h-11 rounded-xl font-mono text-xs text-slate-600"
-                                />
-                                {!isModelValid && (
-                                    <p className="text-[10px] text-red-500">
-                                        {lang === 'es' ? 'Modelo inválido. Ejemplo válido: gpt-4o-mini.' : 'Invalid model. Valid example: gpt-4o-mini.'}
-                                    </p>
-                                )}
-                                <p className="text-[10px] text-slate-400">
-                                    {lang === 'es'
-                                        ? 'Modelo usado en Chat Completions y como fallback de Responses. Si queda vacío, usa gpt-4o.'
-                                        : 'Model used by Chat Completions and as Responses fallback. If empty, defaults to gpt-4o.'}
-                                </p>
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em]">
-                                    {lang === 'es' ? 'VERSIÓN PROMPT' : 'PROMPT VERSION'}
-                                </Label>
-                                <Input
-                                    value={promptVersion}
-                                    onChange={e => setPromptVersion(e.target.value)}
-                                    placeholder="1"
-                                    className="bg-slate-50 border-slate-200 h-11 rounded-xl font-mono text-xs text-slate-600"
-                                />
-                                <p className="text-[10px] text-slate-400">
-                                    {lang === 'es'
-                                        ? 'Aplica cuando el Prompt ID tiene formato pmpt_*.'
-                                        : 'Applies when Prompt ID uses pmpt_* format.'}
-                                </p>
-                            </div>
-                        </CardContent>
-                    </Card>
+                            ) : null}
+                        </div>
 
-                    <Card className="bg-white shadow-sm border-slate-200 overflow-hidden rounded-3xl transition-all">
-                        <CardHeader className="bg-slate-50 border-b border-slate-100 py-5">
-                            <CardTitle className="flex items-center gap-2 text-base font-black text-slate-900">
+                        <div className="space-y-2">
+                            <Label className="admin-editor-label">Prompt ID</Label>
+                            <Input
+                                value={promptId}
+                                onChange={(event) => setPromptId(event.target.value)}
+                                placeholder="pmpt_xxxxx"
+                                className="h-10 rounded-xl border-slate-200 bg-slate-50 font-mono text-xs text-slate-700"
+                            />
+                            {!isPromptIdValid ? (
+                                <p className="text-[11px] text-red-500">
+                                    {lang === 'es' ? 'Debe iniciar con pmpt_ o quedar vacio.' : 'Must start with pmpt_ or stay empty.'}
+                                </p>
+                            ) : null}
+                            <p className="admin-editor-note">
+                                {lang === 'es'
+                                    ? 'Si usas pmpt_*, se ejecuta Responses API con prompt gestionado.'
+                                    : 'Using pmpt_* triggers the Responses API with a managed prompt.'}
+                            </p>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label className="admin-editor-label">{lang === 'es' ? 'Modelo' : 'Model'}</Label>
+                            <Input
+                                value={modelName}
+                                onChange={(event) => setModelName(event.target.value)}
+                                placeholder="gpt-4o"
+                                className="h-10 rounded-xl border-slate-200 bg-slate-50 font-mono text-xs text-slate-700"
+                            />
+                            {!isModelValid ? (
+                                <p className="text-[11px] text-red-500">
+                                    {lang === 'es' ? 'Modelo invalido. Ejemplo: gpt-4o-mini.' : 'Invalid model. Example: gpt-4o-mini.'}
+                                </p>
+                            ) : null}
+                            <p className="admin-editor-note">
+                                {lang === 'es'
+                                    ? 'Se usa en Chat Completions y como fallback de Responses.'
+                                    : 'Used for Chat Completions and as the Responses fallback.'}
+                            </p>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label className="admin-editor-label">{lang === 'es' ? 'Version del prompt' : 'Prompt version'}</Label>
+                            <Input
+                                value={promptVersion}
+                                onChange={(event) => setPromptVersion(event.target.value)}
+                                placeholder="1"
+                                className="h-10 rounded-xl border-slate-200 bg-slate-50 font-mono text-xs text-slate-700"
+                            />
+                        </div>
+                    </AdminPanel>
+
+                    <AdminPanel
+                        variant="section"
+                        title={lang === 'es' ? 'Instruccion de evaluacion' : 'Evaluation instruction'}
+                        description={lang === 'es'
+                            ? 'Regla base para salida, criterio y justificacion.'
+                            : 'Base rule for output, criteria, and justification.'}
+                    >
+                        <textarea
+                            value={config.evaluation_instruction || ''}
+                            onChange={(event) => setConfig((previous) => ({ ...previous, evaluation_instruction: event.target.value }))}
+                            placeholder={lang === 'es'
+                                ? 'Evalua objetivamente cada criterio, cita evidencia breve y responde solo en JSON.'
+                                : 'Evaluate each criterion objectively, cite brief evidence, and respond only in JSON.'}
+                            className="min-h-[180px] w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 font-mono text-sm text-slate-700 outline-none focus:ring-2 focus:ring-primary/15 resize-y"
+                        />
+                    </AdminPanel>
+
+                    <AdminPanel
+                        variant="section"
+                        title={(
+                            <span className="flex items-center gap-2">
                                 <Database className="h-5 w-5 text-primary" />
-                                {lang === 'es' ? 'Control de RAG' : 'RAG control'}
-                                <HelpTooltip
-                                    title="RAG"
-                                    content={lang === 'es'
-                                        ? 'Definí cuándo el evaluador consulta evidencia documental y qué tan estricto debe ser con esa evidencia.'
-                                        : 'Define when the evaluator should query documentary evidence and how strict it should be with that evidence.'}
-                                />
-                            </CardTitle>
-                            <CardDescription className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">
-                                {lang === 'es' ? 'Simple + avanzado para evaluación' : 'Simple + advanced for evaluation'}
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4 pt-6">
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] text-slate-500 font-bold flex items-center gap-1">
-                                        {lang === 'es' ? 'Modo' : 'Mode'}
-                                        <HelpTooltip
-                                            title={lang === 'es' ? 'Modo RAG' : 'RAG mode'}
-                                            content={lang === 'es'
-                                                ? 'Nunca: no busca evidencia. Siempre: consulta evidencia en cada evaluación. Solo evaluación: prioriza uso en evaluación.'
-                                                : 'Never: no retrieval. Always: retrieve evidence every evaluation. Evaluation only: prioritizes evaluation usage.'}
-                                        />
-                                    </Label>
-                                    <select
-                                        value={ragConfig.mode}
-                                        onChange={(e) => updateRagConfig({ mode: e.target.value, enabled: e.target.value !== 'never' })}
-                                        className="w-full h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700"
-                                    >
-                                        <option value="never">{lang === 'es' ? 'Nunca' : 'Never'}</option>
-                                        <option value="always">{lang === 'es' ? 'Siempre' : 'Always'}</option>
-                                        <option value="evaluation_only">{lang === 'es' ? 'Solo evaluación' : 'Evaluation only'}</option>
-                                    </select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] text-slate-500 font-bold flex items-center gap-1">
-                                        {lang === 'es' ? 'Motor' : 'Engine'}
-                                        <HelpTooltip
-                                            title={lang === 'es' ? 'Motor RAG' : 'RAG engine'}
-                                            content={lang === 'es'
-                                                ? 'Wrapper ofrece más control técnico. Platform usa búsqueda nativa de OpenAI con menos configuración.'
-                                                : 'Wrapper provides more technical control. Platform uses native OpenAI retrieval with fewer settings.'}
-                                        />
-                                    </Label>
-                                    <select
-                                        value={ragConfig.owner}
-                                        onChange={(e) => updateRagConfig({ owner: e.target.value, rag_owner: e.target.value })}
-                                        className="w-full h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700"
-                                    >
-                                        <option value="wrapper">Wrapper</option>
-                                        <option value="platform">Platform</option>
-                                    </select>
-                                    <p className="text-[10px] text-slate-400">
-                                        {ragConfig.owner === 'wrapper'
-                                            ? (lang === 'es' ? 'Recomendado si necesitas tuning fino y fallback configurable.' : 'Recommended if you need fine tuning and configurable fallback.')
-                                            : (lang === 'es' ? 'Recomendado si buscas una configuración más simple.' : 'Recommended if you want simpler setup.')}
-                                    </p>
-                                </div>
-                            </div>
-
+                                {lang === 'es' ? 'RAG y evidencia' : 'RAG and evidence'}
+                            </span>
+                        )}
+                        description={lang === 'es'
+                            ? 'Controla cuando consultar evidencia y cuan estricta debe ser.'
+                            : 'Control when to query evidence and how strict it should be.'}
+                        contentClassName="space-y-5"
+                    >
+                        <div className="grid gap-4 sm:grid-cols-2">
                             <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <Label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-                                        {lang === 'es' ? 'IDs de Vector Store' : 'Vector Store IDs'}
-                                    </Label>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        className="h-7 text-xs"
-                                        onClick={() => updateRagConfig({ vector_store_ids: [...(ragConfig.vector_store_ids || []), ''] })}
-                                    >
-                                        {lang === 'es' ? '+ Agregar ID' : '+ Add ID'}
-                                    </Button>
-                                </div>
-                                <p className="text-[10px] text-slate-400">
-                                    {lang === 'es'
-                                        ? 'Este botón agrega una fila para pegar un ID (vs_...).'
-                                        : 'This button adds a row to paste a Vector Store ID (vs_...).'}
+                                <Label className="admin-editor-label">{lang === 'es' ? 'Modo' : 'Mode'}</Label>
+                                <select
+                                    value={ragConfig.mode}
+                                    onChange={(event) => updateRagConfig({ mode: event.target.value, enabled: event.target.value !== 'never' })}
+                                    className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700"
+                                >
+                                    <option value="never">{lang === 'es' ? 'Nunca' : 'Never'}</option>
+                                    <option value="always">{lang === 'es' ? 'Siempre' : 'Always'}</option>
+                                    <option value="evaluation_only">{lang === 'es' ? 'Solo evaluacion' : 'Evaluation only'}</option>
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="admin-editor-label">{lang === 'es' ? 'Motor' : 'Engine'}</Label>
+                                <select
+                                    value={ragConfig.owner}
+                                    onChange={(event) => updateRagConfig({ owner: event.target.value, rag_owner: event.target.value })}
+                                    className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700"
+                                >
+                                    <option value="wrapper">Wrapper</option>
+                                    <option value="platform">Platform</option>
+                                </select>
+                                <p className="admin-editor-note">
+                                    {ragConfig.owner === 'wrapper'
+                                        ? (lang === 'es' ? 'Wrapper permite mas tuning y fallback configurable.' : 'Wrapper allows finer tuning and configurable fallback.')
+                                        : (lang === 'es' ? 'Platform reduce configuracion y usa retrieval nativo.' : 'Platform reduces configuration and uses native retrieval.')}
                                 </p>
-                                {(ragConfig.vector_store_ids || []).length === 0 && (
-                                    <p className="text-[10px] text-slate-400 italic">
-                                        {lang === 'es' ? 'No hay stores cargados.' : 'No stores configured.'}
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                                <Label className="admin-editor-label">{lang === 'es' ? 'Vector Store IDs' : 'Vector Store IDs'}</Label>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 rounded-xl border-slate-200 px-3 text-[11px] font-semibold"
+                                    onClick={() => updateRagConfig({ vector_store_ids: [...(ragConfig.vector_store_ids || []), ''] })}
+                                >
+                                    {lang === 'es' ? 'Agregar ID' : 'Add ID'}
+                                </Button>
+                            </div>
+                            {(ragConfig.vector_store_ids || []).length === 0 ? (
+                                <div className="admin-editor-subpanel border-dashed">
+                                    <p className="text-sm text-slate-500">
+                                        {lang === 'es' ? 'No hay stores configurados.' : 'No stores configured yet.'}
                                     </p>
-                                )}
+                                </div>
+                            ) : (
                                 <div className="space-y-2">
                                     {(ragConfig.vector_store_ids || []).map((id: string, index: number) => (
                                         <div key={`${index}-${id || 'empty'}`} className="flex items-center gap-2">
                                             <Input
                                                 value={id}
-                                                onChange={(e) => {
+                                                onChange={(event) => {
                                                     const next = [...(ragConfig.vector_store_ids || [])];
-                                                    next[index] = e.target.value;
+                                                    next[index] = event.target.value;
                                                     updateRagConfig({ vector_store_ids: next });
                                                 }}
                                                 placeholder="vs_abc123"
-                                                className="h-9 bg-slate-50 border-slate-200 rounded-lg font-mono text-xs text-slate-700"
+                                                className="h-10 rounded-xl border-slate-200 bg-slate-50 font-mono text-xs text-slate-700"
                                             />
                                             <Button
                                                 type="button"
                                                 variant="ghost"
                                                 size="icon"
-                                                className="h-8 w-8 text-red-400"
+                                                className="h-9 w-9 rounded-full text-red-500 hover:bg-red-50"
                                                 onClick={() => {
                                                     const next = [...(ragConfig.vector_store_ids || [])];
                                                     next.splice(index, 1);
@@ -761,337 +787,134 @@ export function EvaluatorEditor({ bot }: Props) {
                                         </div>
                                     ))}
                                 </div>
+                            )}
+                        </div>
+
+                        <div className="admin-editor-subpanel flex items-center justify-between gap-4">
+                            <div className="space-y-1">
+                                <p className="font-semibold text-slate-900">
+                                    {lang === 'es' ? 'Evidencia requerida' : 'Evidence required'}
+                                </p>
+                                <p className="admin-editor-note">
+                                    {lang === 'es' ? 'Si no hay evidencia, el evaluador debe caer en una respuesta segura.' : 'If evidence is missing, the evaluator should fall back safely.'}
+                                </p>
                             </div>
+                            <input
+                                type="checkbox"
+                                checked={ragConfig.strict_mode}
+                                onChange={(event) => updateRagConfig({ strict_mode: event.target.checked })}
+                            />
+                        </div>
 
-                            <div className="flex items-center justify-between rounded-xl border border-slate-200 p-3 bg-slate-50">
-                                <div>
-                                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                                        {lang === 'es' ? 'Evidencia requerida' : 'Evidence required'}
-                                    </p>
-                                    <p className="text-[10px] text-slate-400">
-                                        {lang === 'es' ? 'Si falta evidencia, evaluación segura.' : 'If evidence is missing, safe evaluation fallback.'}
-                                    </p>
-                                </div>
-                                <input
-                                    type="checkbox"
-                                    checked={ragConfig.strict_mode}
-                                    onChange={(e) => updateRagConfig({ strict_mode: e.target.checked })}
-                                />
-                            </div>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            className="h-9 w-full rounded-xl text-sm font-semibold text-slate-600"
+                            onClick={() => setRagAdvancedOpen((value) => !value)}
+                        >
+                            {ragAdvancedOpen
+                                ? (lang === 'es' ? 'Ocultar avanzado' : 'Hide advanced')
+                                : (lang === 'es' ? 'Mostrar avanzado' : 'Show advanced')}
+                        </Button>
 
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                className="w-full h-8 text-xs text-slate-600"
-                                onClick={() => setRagAdvancedOpen((v) => !v)}
-                            >
-                                {ragAdvancedOpen
-                                    ? (lang === 'es' ? 'Ocultar avanzado' : 'Hide advanced')
-                                    : (lang === 'es' ? 'Mostrar avanzado' : 'Show advanced')}
-                            </Button>
-
-                            {ragAdvancedOpen && (
-                                <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                                    {ragConfig.owner === 'wrapper' ? (
-                                        <>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <div className="space-y-1">
-                                                    <Label className="text-[10px] text-slate-500 font-bold">{lang === 'es' ? 'Estrategia' : 'Strategy'}</Label>
-                                                    <select
-                                                        value={ragConfig.wrapper.strategy}
-                                                        onChange={(e) => updateRagConfig({ wrapper: { ...ragConfig.wrapper, strategy: e.target.value } })}
-                                                        className="w-full h-9 rounded border border-slate-200 bg-white px-2 text-xs"
-                                                    >
-                                                        <option value="metadata_first">{lang === 'es' ? 'Priorizar metadatos' : 'Metadata first'}</option>
-                                                        <option value="similarity">{lang === 'es' ? 'Priorizar similitud' : 'Similarity first'}</option>
-                                                        <option value="hybrid">{lang === 'es' ? 'Híbrida (balanceada)' : 'Hybrid (balanced)'}</option>
-                                                    </select>
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <Label className="text-[10px] text-slate-500 font-bold">Fallback</Label>
-                                                    <select
-                                                        value={ragConfig.wrapper.fallback}
-                                                        onChange={(e) => updateRagConfig({ wrapper: { ...ragConfig.wrapper, fallback: e.target.value } })}
-                                                        className="w-full h-9 rounded border border-slate-200 bg-white px-2 text-xs"
-                                                    >
-                                                        <option value="rewrite_retry">{lang === 'es' ? 'Reescribir y reintentar' : 'Rewrite and retry'}</option>
-                                                        <option value="secondary_store">{lang === 'es' ? 'Buscar en store secundario' : 'Search secondary store'}</option>
-                                                        <option value="safe_reply">{lang === 'es' ? 'Respuesta segura (sin inventar)' : 'Safe reply (no hallucination)'}</option>
-                                                        <option value="none">{lang === 'es' ? 'Sin fallback' : 'No fallback'}</option>
-                                                    </select>
-                                                </div>
+                        {ragAdvancedOpen ? (
+                            <div className="admin-editor-subpanel space-y-4">
+                                {ragConfig.owner === 'wrapper' ? (
+                                    <>
+                                        <div className="grid gap-4 sm:grid-cols-2">
+                                            <div className="space-y-2">
+                                                <Label className="admin-editor-label">{lang === 'es' ? 'Estrategia' : 'Strategy'}</Label>
+                                                <select
+                                                    value={ragConfig.wrapper.strategy}
+                                                    onChange={(event) => updateRagConfig({ wrapper: { ...ragConfig.wrapper, strategy: event.target.value } })}
+                                                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"
+                                                >
+                                                    <option value="metadata_first">{lang === 'es' ? 'Priorizar metadatos' : 'Metadata first'}</option>
+                                                    <option value="similarity">{lang === 'es' ? 'Priorizar similitud' : 'Similarity first'}</option>
+                                                    <option value="hybrid">{lang === 'es' ? 'Hibrida' : 'Hybrid'}</option>
+                                                </select>
                                             </div>
-                                            <div className="grid grid-cols-4 gap-3">
-                                                <div className="space-y-1">
-                                                    <Label className="text-[10px] text-slate-500 font-bold">Top-K</Label>
-                                                    <Input
-                                                        type="number"
-                                                        value={ragConfig.wrapper.top_k}
-                                                        onChange={(e) => updateRagConfig({ wrapper: { ...ragConfig.wrapper, top_k: Number(e.target.value || 8) } })}
-                                                        className="h-9 bg-white border-slate-200 text-xs"
-                                                    />
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <Label className="text-[10px] text-slate-500 font-bold">{lang === 'es' ? 'Umbral de puntaje' : 'Score Threshold'}</Label>
-                                                    <Input
-                                                        type="number"
-                                                        step="0.01"
-                                                        value={ragConfig.wrapper.score_threshold ?? ''}
-                                                        onChange={(e) => updateRagConfig({ wrapper: { ...ragConfig.wrapper, score_threshold: e.target.value ? Number(e.target.value) : undefined } })}
-                                                        className="h-9 bg-white border-slate-200 text-xs"
-                                                    />
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <Label className="text-[10px] text-slate-500 font-bold">{lang === 'es' ? 'TTL de caché' : 'Cache TTL'}</Label>
-                                                    <Input
-                                                        type="number"
-                                                        value={ragConfig.wrapper.cache_ttl}
-                                                        onChange={(e) => updateRagConfig({ wrapper: { ...ragConfig.wrapper, cache_ttl: Number(e.target.value || 120) } })}
-                                                        className="h-9 bg-white border-slate-200 text-xs"
-                                                    />
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <Label className="text-[10px] text-slate-500 font-bold">{lang === 'es' ? 'Máx. tokens evidencia' : 'Max evidence tokens'}</Label>
-                                                    <Input
-                                                        type="number"
-                                                        value={ragConfig.wrapper.max_evidence_tokens}
-                                                        onChange={(e) => updateRagConfig({ wrapper: { ...ragConfig.wrapper, max_evidence_tokens: Number(e.target.value || 1400) } })}
-                                                        className="h-9 bg-white border-slate-200 text-xs"
-                                                    />
-                                                </div>
+                                            <div className="space-y-2">
+                                                <Label className="admin-editor-label">Fallback</Label>
+                                                <select
+                                                    value={ragConfig.wrapper.fallback}
+                                                    onChange={(event) => updateRagConfig({ wrapper: { ...ragConfig.wrapper, fallback: event.target.value } })}
+                                                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"
+                                                >
+                                                    <option value="rewrite_retry">{lang === 'es' ? 'Reescribir y reintentar' : 'Rewrite and retry'}</option>
+                                                    <option value="secondary_store">{lang === 'es' ? 'Store secundario' : 'Secondary store'}</option>
+                                                    <option value="safe_reply">{lang === 'es' ? 'Respuesta segura' : 'Safe reply'}</option>
+                                                    <option value="none">{lang === 'es' ? 'Sin fallback' : 'No fallback'}</option>
+                                                </select>
                                             </div>
-                                            <p className="text-[10px] text-slate-400">
-                                                {lang === 'es'
-                                                    ? 'Top-K alto mejora cobertura pero puede meter ruido. Sube umbral para priorizar evidencia más confiable. Bajar máx. tokens evidencia reduce costo por evaluación.'
-                                                    : 'Higher Top-K improves coverage but may add noise. Raise threshold to prioritize stronger evidence. Lower max evidence tokens reduces evaluation cost.'}
-                                            </p>
-                                        </>
-                                    ) : (
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div className="space-y-1">
-                                                <Label className="text-[10px] text-slate-500 font-bold">max_num_results</Label>
+                                        </div>
+
+                                        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                                            <div className="space-y-2">
+                                                <Label className="admin-editor-label">Top-K</Label>
                                                 <Input
                                                     type="number"
-                                                    value={ragConfig.platform.max_num_results}
-                                                    onChange={(e) => updateRagConfig({ platform: { ...ragConfig.platform, max_num_results: Number(e.target.value || 8) } })}
-                                                    className="h-9 bg-white border-slate-200 text-xs"
+                                                    value={ragConfig.wrapper.top_k}
+                                                    onChange={(event) => updateRagConfig({ wrapper: { ...ragConfig.wrapper, top_k: Number(event.target.value || 8) } })}
+                                                    className="h-10 rounded-xl border-slate-200 bg-white text-sm"
                                                 />
                                             </div>
-                                            <div className="space-y-1">
-                                                <Label className="text-[10px] text-slate-500 font-bold">force_tool</Label>
-                                                <div className="h-9 rounded border border-slate-200 bg-white px-3 flex items-center">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={Boolean(ragConfig.platform.force_tool)}
-                                                        onChange={(e) => updateRagConfig({ platform: { ...ragConfig.platform, force_tool: e.target.checked } })}
-                                                    />
-                                                </div>
+                                            <div className="space-y-2">
+                                                <Label className="admin-editor-label">{lang === 'es' ? 'Umbral' : 'Threshold'}</Label>
+                                                <Input
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={ragConfig.wrapper.score_threshold ?? ''}
+                                                    onChange={(event) => updateRagConfig({ wrapper: { ...ragConfig.wrapper, score_threshold: event.target.value ? Number(event.target.value) : undefined } })}
+                                                    className="h-10 rounded-xl border-slate-200 bg-white text-sm"
+                                                />
                                             </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-                </div>
-
-                <div className="lg:col-span-2 space-y-6">
-                    <Card className="bg-white shadow-sm border-slate-200 overflow-hidden rounded-3xl transition-all">
-                        <CardHeader className="bg-slate-50 border-b border-slate-100 py-5">
-                            <CardTitle className="text-base font-black text-slate-900">
-                                <span className="flex items-center gap-1">
-                                    {lang === 'es' ? 'Instrucción de Evaluación' : 'Evaluation Instruction'}
-                                    <HelpTooltip
-                                        title={lang === 'es' ? 'Instrucción' : 'Instruction'}
-                                        content={lang === 'es'
-                                            ? 'Es la regla madre del evaluador. Definí criterios, formato de salida y cómo justificar cada puntaje.'
-                                            : 'This is the evaluator’s master rule. Define criteria, output format, and how each score should be justified.'}
-                                    />
-                                </span>
-                            </CardTitle>
-                            <CardDescription className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">
-                                {lang === 'es'
-                                    ? 'Define exactamente cómo debe evaluar el modelo.'
-                                    : 'Define exactly how the model should evaluate.'}
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="p-6">
-                            <textarea
-                                value={config.evaluation_instruction || ''}
-                                onChange={(e) => setConfig((prev) => ({ ...prev, evaluation_instruction: e.target.value }))}
-                                placeholder={lang === 'es'
-                                    ? 'Evalúa objetivamente cada criterio, cita evidencia textual breve y responde solo en JSON.'
-                                    : 'Evaluate each criterion objectively, cite short textual evidence, and return only JSON.'}
-                                className="w-full min-h-[120px] p-3 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-1 focus:ring-primary/20 resize-y font-mono text-slate-700"
-                            />
-                        </CardContent>
-                    </Card>
-
-                    <Card className="bg-white shadow-sm border-slate-200 overflow-hidden rounded-3xl transition-all">
-                        <CardHeader className="bg-slate-50 border-b border-slate-100 py-5">
-                            <div>
-                                <CardTitle className="flex items-center gap-2 text-base font-black text-slate-900">
-                                    <CheckCircle2 className="h-5 w-5 text-primary" /> {lang === 'es' ? 'Criterios Booleanos (Sí/No)' : 'Boolean Criteria (Pass/Fail)'}
-                                    <HelpTooltip
-                                        title={lang === 'es' ? 'Booleanos' : 'Boolean criteria'}
-                                        content={lang === 'es'
-                                            ? 'Cada criterio booleano vale cumplimiento o incumplimiento. Es ideal para checklist objetivo.'
-                                            : 'Each boolean criterion is pass/fail. Ideal for objective checklist validation.'}
-                                    />
-                                </CardTitle>
-                                <CardDescription className="text-[10px] text-slate-500 font-bold uppercase tracking-tight mt-1">
-                                    {lang === 'es' ? 'Objetivos medibles que se cumplen o no.' : 'Measurable objectives that are either met or not.'}
-                                </CardDescription>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4 pt-6 p-6">
-                            {config.criteria.boolean.length === 0 && (
-                                <div className="text-center py-8 text-slate-400 border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
-                                    <p className="text-xs font-bold uppercase tracking-widest">{lang === 'es' ? 'Sin criterios booleanos' : 'No boolean criteria'}</p>
-                                </div>
-                            )}
-                            {config.criteria.boolean.map((criterion: Criterion, idx: number) => (
-                                <div
-                                    key={criterion.id}
-                                    data-evaluator-criterion-type="boolean"
-                                    data-evaluator-criterion-id={criterion.id}
-                                    className="scroll-mt-24 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3 group hover:border-primary/20 transition-all"
-                                >
-                                    <div className="flex justify-between items-start gap-3">
-                                        <div className="flex-1 space-y-3">
-                                            <div className="flex gap-3">
-                                                <div className="h-6 w-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[10px] font-black shrink-0 mt-2">
-                                                    {idx + 1}
-                                                </div>
-                                                <div className="flex-1">
-                                                    <Label className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1 block">
-                                                        {lang === 'es' ? 'Título (Visible)' : 'Title (Visible)'}
-                                                    </Label>
-                                                    <Input
-                                                        value={criterion.title}
-                                                        onChange={e => updateCriterion('boolean', criterion.id, 'title', e.target.value)}
-                                                        placeholder={lang === 'es' ? 'ej. Saludo Inicial' : 'e.g. Initial Greeting'}
-                                                        className="h-9 text-sm font-bold bg-white border-slate-200"
-                                                    />
-                                                </div>
+                                            <div className="space-y-2">
+                                                <Label className="admin-editor-label">TTL</Label>
+                                                <Input
+                                                    type="number"
+                                                    value={ragConfig.wrapper.cache_ttl}
+                                                    onChange={(event) => updateRagConfig({ wrapper: { ...ragConfig.wrapper, cache_ttl: Number(event.target.value || 120) } })}
+                                                    className="h-10 rounded-xl border-slate-200 bg-white text-sm"
+                                                />
                                             </div>
-                                            <div className="pl-9">
-                                                <Label className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1 block">
-                                                    {lang === 'es' ? 'Instrucción al Modelo (Interno)' : 'Model Instruction (Internal)'}
-                                                </Label>
-                                                <textarea
-                                                    value={criterion.instruction}
-                                                    onChange={e => updateCriterion('boolean', criterion.id, 'instruction', e.target.value)}
-                                                    placeholder={lang === 'es' ? 'Evalúa si el usuario saludó cortesmente...' : 'Evaluate if user greeted politely...'}
-                                                    className="w-full min-h-[60px] p-3 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-primary/20 resize-none font-mono text-slate-600"
+                                            <div className="space-y-2">
+                                                <Label className="admin-editor-label">{lang === 'es' ? 'Max. evidencia' : 'Max evidence'}</Label>
+                                                <Input
+                                                    type="number"
+                                                    value={ragConfig.wrapper.max_evidence_tokens}
+                                                    onChange={(event) => updateRagConfig({ wrapper: { ...ragConfig.wrapper, max_evidence_tokens: Number(event.target.value || 1400) } })}
+                                                    className="h-10 rounded-xl border-slate-200 bg-white text-sm"
                                                 />
                                             </div>
                                         </div>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => removeCriterion('boolean', criterion.id)}
-                                            className="text-slate-300 hover:text-red-500 hover:bg-red-50 h-8 w-8 p-0 rounded-full"
-                                        >
-                                            <Trash className="h-4 w-4" />
-                                        </Button>
+                                    </>
+                                ) : (
+                                    <div className="grid gap-4 sm:grid-cols-2">
+                                        <div className="space-y-2">
+                                            <Label className="admin-editor-label">max_num_results</Label>
+                                            <Input
+                                                type="number"
+                                                value={ragConfig.platform.max_num_results}
+                                                onChange={(event) => updateRagConfig({ platform: { ...ragConfig.platform, max_num_results: Number(event.target.value || 8) } })}
+                                                className="h-10 rounded-xl border-slate-200 bg-white text-sm"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="admin-editor-label">force_tool</Label>
+                                            <div className="flex h-10 items-center rounded-xl border border-slate-200 bg-white px-3">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={Boolean(ragConfig.platform.force_tool)}
+                                                    onChange={(event) => updateRagConfig({ platform: { ...ragConfig.platform, force_tool: event.target.checked } })}
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => addCriterion('boolean')}
-                                className="w-full"
-                            >
-                                <Plus className="h-4 w-4 mr-2" />
-                                {lang === 'es' ? 'Agregar criterio booleano' : 'Add boolean criterion'}
-                            </Button>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="bg-white shadow-sm border-slate-200 overflow-hidden rounded-3xl transition-all">
-                        <CardHeader className="bg-slate-50 border-b border-slate-100 py-5">
-                            <div>
-                                <CardTitle className="flex items-center gap-2 text-base font-black text-slate-900">
-                                    <MessageSquareText className="h-5 w-5 text-primary" /> {lang === 'es' ? 'Criterios Cualitativos (Feedback)' : 'Qualitative Criteria (Feedback)'}
-                                    <HelpTooltip
-                                        title={lang === 'es' ? 'Cualitativos' : 'Qualitative criteria'}
-                                        content={lang === 'es'
-                                            ? 'Generan observaciones y recomendaciones de mejora, no solo aprobación/rechazo.'
-                                            : 'They produce observations and improvement recommendations, not just pass/fail.'}
-                                    />
-                                </CardTitle>
-                                <CardDescription className="text-[10px] text-slate-500 font-bold uppercase tracking-tight mt-1">
-                                    {lang === 'es' ? 'Análisis detallado y observaciones.' : 'Detailed analysis and observations.'}
-                                </CardDescription>
+                                )}
                             </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4 pt-6 p-6">
-                            {config.criteria.qualitative.length === 0 && (
-                                <div className="text-center py-8 text-slate-400 border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
-                                    <p className="text-xs font-bold uppercase tracking-widest">{lang === 'es' ? 'Sin criterios cualitativos' : 'No qualitative criteria'}</p>
-                                </div>
-                            )}
-                            {config.criteria.qualitative.map((criterion: Criterion, idx: number) => (
-                                <div
-                                    key={criterion.id}
-                                    data-evaluator-criterion-type="qualitative"
-                                    data-evaluator-criterion-id={criterion.id}
-                                    className="scroll-mt-24 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3 group hover:border-primary/20 transition-all"
-                                >
-                                    <div className="flex justify-between items-start gap-3">
-                                        <div className="flex-1 space-y-3">
-                                            <div className="flex gap-3">
-                                                <div className="h-6 w-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[10px] font-black shrink-0 mt-2">
-                                                    {idx + 1}
-                                                </div>
-                                                <div className="flex-1">
-                                                    <Label className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1 block">
-                                                        {lang === 'es' ? 'Título (Visible)' : 'Title (Visible)'}
-                                                    </Label>
-                                                    <Input
-                                                        value={criterion.title}
-                                                        onChange={e => updateCriterion('qualitative', criterion.id, 'title', e.target.value)}
-                                                        placeholder={lang === 'es' ? 'ej. Tono de Voz' : 'e.g. Tone of Voice'}
-                                                        className="h-9 text-sm font-bold bg-white border-slate-200"
-                                                    />
-                                                </div>
-                                            </div>
-                                            <div className="pl-9">
-                                                <Label className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1 block">
-                                                    {lang === 'es' ? 'Instrucción al Modelo (Interno)' : 'Model Instruction (Internal)'}
-                                                </Label>
-                                                <textarea
-                                                    value={criterion.instruction}
-                                                    onChange={e => updateCriterion('qualitative', criterion.id, 'instruction', e.target.value)}
-                                                    placeholder={lang === 'es' ? 'Analiza si el tono fue profesional...' : 'Analyze if tone was professional...'}
-                                                    className="w-full min-h-[60px] p-3 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-primary/20 resize-none font-mono text-slate-600"
-                                                />
-                                            </div>
-                                        </div>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => removeCriterion('qualitative', criterion.id)}
-                                            className="text-slate-300 hover:text-red-500 hover:bg-red-50 h-8 w-8 p-0 rounded-full"
-                                        >
-                                            <Trash className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                </div>
-                            ))}
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => addCriterion('qualitative')}
-                                className="w-full"
-                            >
-                                <Plus className="h-4 w-4 mr-2" />
-                                {lang === 'es' ? 'Agregar criterio cualitativo' : 'Add qualitative criterion'}
-                            </Button>
-                        </CardContent>
-                    </Card>
+                        ) : null}
+                    </AdminPanel>
                 </div>
             </div>
 

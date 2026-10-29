@@ -1,3 +1,4 @@
+import { buildSessionRuntimeSnapshot } from '@/lib/runtime-bot';
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getSessionActor } from '@/lib/auth-utils';
@@ -219,7 +220,7 @@ export async function POST(req: NextRequest) {
                 bot_id: botId,
                 organization_id: resolvedOrganizationId,
                 external_user_id: sessionActor.userId,
-                metadata: persistedMetadata as Prisma.InputJsonValue,
+                metadata: { ...persistedMetadata, runtime_snapshot: await buildSessionRuntimeSnapshot(botId) } as unknown as Prisma.InputJsonValue,
             },
         });
 

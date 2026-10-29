@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Source_Sans_3 } from "next/font/google";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { Providers } from "@/components/providers/providers";
 import "./globals.css";
 
@@ -11,7 +11,7 @@ const sourceSans = Source_Sans_3({
 });
 
 export const metadata: Metadata = {
-    title: "AI Simulator SaaS",
+    title: "Simulator Hub",
     description: "Stateless Multi-tenant AI SaaS",
 };
 
@@ -20,6 +20,7 @@ export default async function RootLayout({
 }: Readonly<{
     children: React.ReactNode;
 }>) {
+    const nonce = (await headers()).get('x-nonce') || undefined;
     const cookieStore = await cookies();
     const cookieLang = cookieStore.get('app-lang')?.value;
     const htmlLang = cookieLang === 'en' ? 'en' : 'es';
@@ -27,7 +28,7 @@ export default async function RootLayout({
     return (
         <html lang={htmlLang} suppressHydrationWarning>
             <body className={`${sourceSans.variable} antialiased`}>
-                <Providers>
+                <Providers nonce={nonce}>
                     {children}
                 </Providers>
             </body>

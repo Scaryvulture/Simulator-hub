@@ -1,3 +1,4 @@
+import { buildSessionRuntimeSnapshot } from './runtime-bot';
 import 'server-only';
 
 import crypto from 'crypto';
@@ -706,6 +707,7 @@ async function createConversationAttempt(params: {
             id: sessionId,
             bot_id: params.botId,
             metadata: {
+                runtime_snapshot: JSON.parse(JSON.stringify(await buildSessionRuntimeSnapshot(params.botId, { draft: true }))),
                 qa_lab: {
                     run_id: params.runId,
                     case_id: params.caseId,

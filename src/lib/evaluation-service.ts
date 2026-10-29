@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { withSessionOperation } from './session-operation';
+import { getSessionRuntimeSnapshot } from './runtime-bot';
 import 'server-only';
 
 import prisma from '@/lib/prisma';
@@ -250,6 +253,10 @@ export async function runSessionEvaluation(
     sessionId: string,
     options: RunSessionEvaluationOptions
 ): Promise<RunSessionEvaluationData> {
+    return withSessionOperation(sessionId, 'evaluation', () => runSessionEvaluationUnlocked(sessionId, options));
+}
+
+async function runSessionEvaluationUnlocked(sessionId: string, options: RunSessionEvaluationOptions): Promise<RunSessionEvaluationData> {
     if (!sessionId) {
         throw new Error('Session ID is required.');
     }
@@ -272,41 +279,13 @@ export async function runSessionEvaluation(
         throw new Error('This conversation must be ended before evaluation.');
     }
 
+    const runtime = await getSessionRuntimeSnapshot(sessionId, session.bot.id);
+    const evaluatorSnapshot = runtime.evaluator;
+    if (!evaluatorSnapshot) throw new Error('No evaluator assigned to this simulation.');
+    const currentEvaluator = await prisma.bot.findFirst({ where: { id: evaluatorSnapshot.id, deleted_at: null } });
+    if (!currentEvaluator) throw new Error('Assigned evaluator bot not found.');
+    const evaluatorBot = { ...currentEvaluator, ...evaluatorSnapshot };
     const existingEvaluation = readStoredEvaluationFromMetadata(session.metadata);
-    if (existingEvaluation && !options.force) {
-        return {
-            evaluation: toPublicEvaluationResult(existingEvaluation),
-            reused: true,
-            storedEvaluation: existingEvaluation,
-        };
-    }
-
-    const simulatorConfig = parseJsonConfig(session.bot.config);
-    const evaluatorId = typeof simulatorConfig.evaluator_bot_id === 'string'
-        ? simulatorConfig.evaluator_bot_id
-        : '';
-    if (!evaluatorId) {
-        throw new Error('No evaluator assigned to this simulation.');
-    }
-
-    const evaluatorBot = await prisma.bot.findUnique({
-        where: { id: evaluatorId },
-        select: {
-            id: true,
-            name: true,
-            bot_type: true,
-            api_key: true,
-            openai_prompt_id: true,
-            openai_vector_store_id: true,
-            prompt_version: true,
-            config: true,
-            deleted_at: true,
-        },
-    });
-    if (!evaluatorBot || evaluatorBot.deleted_at) {
-        throw new Error('Assigned evaluator bot not found.');
-    }
-
     const evaluatorRawConfig = parseJsonConfig(evaluatorBot.config);
     const evaluatorParsed = BotConfigSchema.safeParse(evaluatorRawConfig || {});
     const evaluatorConfig: BotConfig = evaluatorParsed.success ? evaluatorParsed.data : {};
@@ -338,6 +317,10 @@ export async function runSessionEvaluation(
         orderBy: { created_at: 'asc' },
     });
 
+    const transcriptHash = createHash('sha256').update(JSON.stringify(messages.map(({ role, content, images }) => ({ role, content, images })))).digest('hex');
+    if (existingEvaluation && !options.force && existingEvaluation.transcript_sha256 === transcriptHash) {
+        return { evaluation: toPublicEvaluationResult(existingEvaluation), reused: true, storedEvaluation: existingEvaluation };
+    }
     const { dialogue, truncated: dialogueTruncated } = buildEvaluationDialogue(messages);
     const runtimeSignals = buildRuntimeSignalsSummary(session.metadata);
 
@@ -616,6 +599,8 @@ Generate the evaluation JSON.`;
     }
 
     const evaluationData: StoredEvaluationResult = {
+        transcript_sha256: transcriptHash,
+        evaluator_snapshot: evaluatorSnapshot,
         score,
         max_score: maxScore,
         percentage,
@@ -650,6 +635,7 @@ Generate the evaluation JSON.`;
         mutate: (metadata) => ({
             metadata: {
                 ...metadata,
+                evaluation_history: [...(Array.isArray(metadata.evaluation_history) ? metadata.evaluation_history : []), ...(metadata.evaluation ? [metadata.evaluation] : [])],
                 evaluation: evaluationData,
             },
         }),

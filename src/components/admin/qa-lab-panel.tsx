@@ -19,8 +19,9 @@ import {
     updateQaLabEvalsConfig,
     updateQaSuite,
 } from '@/app/actions/qa-lab';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
+import { AdminPanel } from '@/components/admin/admin-panel';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +30,6 @@ import { toast } from 'sonner';
 import { Activity, AlertTriangle, Copy, Download, ExternalLink, Eye, EyeOff, FlaskConical, Play, RefreshCcw, ShieldCheck, Trash2 } from 'lucide-react';
 import type { QaCaseCategory, QaJudgeMode, QaSeverity } from '@prisma/client';
 import { useLanguage } from '@/components/providers/i18n-context';
-import { HelpTooltip } from '@/components/admin/help-tooltip';
 
 type DashboardState = Awaited<ReturnType<typeof getQaLabDashboard>>;
 type SuiteDetail = Awaited<ReturnType<typeof getQaSuiteDetail>>;
@@ -792,19 +792,32 @@ export function QaLabPanel() {
     }
 
     if (isLoading) {
-        return <div className="p-20 text-center text-slate-400 font-bold uppercase tracking-widest text-xs animate-pulse">{t('Cargando QA Lab...', 'Loading QA Lab...')}</div>;
+        return (
+            <div className="p-20 text-center text-sm font-semibold text-slate-500">
+                {t('Cargando QA Lab...', 'Loading QA Lab...')}
+            </div>
+        );
     }
 
     if (!dashboard) {
         return (
-            <div className="space-y-4">
+            <div className="space-y-6">
+                <AdminPageHeader
+                    variant="directory"
+                    eyebrow={t('Administracion', 'Administration')}
+                    title="QA Lab"
+                    description={t(
+                        'Suites, casos y corridas para validacion automatizada.',
+                        'Suites, cases and runs for automated validation.',
+                    )}
+                />
                 <Alert className="border-rose-200 bg-rose-50 text-rose-700">
                     <AlertTriangle className="h-4 w-4" />
                     <span className="text-sm">
-                        {loadError || t('No se pudo cargar QA Lab. Revisa permisos de admin, conexión DB y configuración.', 'Could not load QA Lab. Check admin permissions, DB connection, and configuration.')}
+                        {loadError || t('No se pudo cargar QA Lab. Revisa permisos de admin, conexion DB y configuracion.', 'Could not load QA Lab. Check admin permissions, DB connection, and configuration.')}
                     </span>
                 </Alert>
-                <Button variant="outline" onClick={retryDashboardLoad}>
+                <Button variant="outline" className="h-11 rounded-2xl border-slate-200 px-4 font-semibold" onClick={retryDashboardLoad}>
                     <RefreshCcw className="mr-2 h-4 w-4" /> {t('Reintentar', 'Retry')}
                 </Button>
             </div>
@@ -818,22 +831,32 @@ export function QaLabPanel() {
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="flex flex-col lg:flex-row gap-6">
-                <Card className="lg:w-80 border-slate-200">
-                    <CardHeader>
-                        <CardTitle className="text-xl font-black flex items-center gap-2">
-                            <FlaskConical className="h-5 w-5 text-primary" /> QA Lab
-                            <HelpTooltip
-                                title="QA Lab"
-                                content={t(
-                                    'Área para pruebas automatizadas por lotes: diseñás suites, casos y corridas con umbrales de calidad.',
-                                    'Area for automated batch testing: design suites, cases, and runs with quality thresholds.',
-                                )}
-                            />
-                        </CardTitle>
-                        <CardDescription>{t('Suites y orquestación automática de corridas (independiente de Evaluadores).', 'Suites and automated run orchestration (independent from Evaluators).')}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
+            <AdminPageHeader
+                variant="directory"
+                eyebrow={t('Administracion', 'Administration')}
+                title="QA Lab"
+                description={t(
+                    'Suites, casos y corridas para validacion automatizada y seguimiento de calidad.',
+                    'Suites, cases and runs for automated validation and quality tracking.',
+                )}
+            />
+
+            <div className="flex flex-col gap-6 lg:flex-row">
+                <AdminPanel
+                    variant="section"
+                    className="lg:w-80"
+                    title={(
+                        <span className="inline-flex items-center gap-2">
+                            <FlaskConical className="h-4 w-4 text-primary" />
+                            QA Lab
+                        </span>
+                    )}
+                    description={t(
+                        'Crea suites, prepara casos y lanza corridas sobre el bot seleccionado.',
+                        'Create suites, prepare cases and launch runs against the selected bot.',
+                    )}
+                    contentClassName="space-y-3"
+                >
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-500 uppercase">
                                 {t('Cantidad de casos plantilla', 'Template case count')}
@@ -846,20 +869,20 @@ export function QaLabPanel() {
                                         max={1000}
                                         value={templateCaseCount}
                                         onChange={(e) => setTemplateCaseCount(Math.max(1, Math.min(parseInt(e.target.value || '10', 10) || 10, 1000)))}
-                                        className="h-10"
+                                        className="h-11 rounded-2xl border-slate-200 bg-white"
                                     />
-                                    <Button className="flex-1" onClick={handleCreateTemplateSuite}>
+                                    <Button className="h-11 flex-1 rounded-2xl px-4 font-semibold" onClick={handleCreateTemplateSuite}>
                                         {t('Crear plantilla', 'Create template')}
                                     </Button>
                                 </div>
                                 {templateCaseCount > 50 && (
-                                    <p className="text-xs text-amber-600 font-medium">
-                                        ⚠️ {t('Muchos casos pueden generar alto consumo.', 'Many cases may generate high usage.')}
+                                    <p className="text-xs font-medium text-amber-700">
+                                        {t('Muchos casos pueden generar alto consumo.', 'Many cases may generate high usage.')}
                                     </p>
                                 )}
                             </div>
                         </div>
-                        <Button className="w-full" variant="outline" onClick={handleCreateSuite}>
+                        <Button className="h-11 w-full rounded-2xl border-slate-200 px-4 font-semibold" variant="outline" onClick={handleCreateSuite}>
                             {t('Crear suite vacía', 'Create empty suite')}
                         </Button>
                         <div className="max-h-64 overflow-auto space-y-2 pt-2">
@@ -867,7 +890,7 @@ export function QaLabPanel() {
                                 <button
                                     key={suite.id}
                                     onClick={() => setSelectedSuiteId(suite.id)}
-                                    className={`w-full text-left rounded-lg border p-2 transition ${selectedSuiteId === suite.id ? 'border-primary bg-primary/5' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
+                                    className={`w-full rounded-2xl border p-3 text-left transition ${selectedSuiteId === suite.id ? 'border-primary/30 bg-primary/5' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
                                 >
                                     <div className="text-sm font-bold text-slate-900">{suite.name}</div>
                                     <div className="text-[11px] text-slate-500">
@@ -876,31 +899,26 @@ export function QaLabPanel() {
                                 </button>
                             ))}
                         </div>
-                    </CardContent>
-                </Card>
+                </AdminPanel>
 
                 <div className="flex-1 space-y-6">
-                    <Card className="border-slate-200">
-                        <CardHeader>
-                            <CardTitle className="text-lg font-black flex items-center gap-2">
-                                <Play className="h-4 w-4 text-primary" /> {t('Control de corrida', 'Run Control')}
-                                <HelpTooltip
-                                    title={t('Corridas', 'Runs')}
-                                    content={t(
-                                        'Elegí bot + suite. Luego podés ejecutar por lote o en automático hasta completar.',
-                                        'Pick bot + suite. Then run in batches or auto-process until completion.',
-                                    )}
-                                />
-                            </CardTitle>
-                            <CardDescription>{t('Selecciona bot y suite para ejecutar QA automático por lotes.', 'Select bot and suite, then run automated QA in batches.')}</CardDescription>
-                        </CardHeader>
-                        <CardContent className="grid grid-cols-1 lg:grid-cols-4 gap-3 items-end">
+                    <AdminPanel
+                        variant="section"
+                        title={(
+                            <span className="inline-flex items-center gap-2">
+                                <Play className="h-4 w-4 text-primary" />
+                                {t('Control de corrida', 'Run control')}
+                            </span>
+                        )}
+                        description={t('Selecciona bot y suite para ejecutar QA automatico por lotes.', 'Select bot and suite to run automated QA in batches.')}
+                        contentClassName="grid grid-cols-1 items-end gap-3 lg:grid-cols-4"
+                    >
                             <div className="space-y-1">
                                 <label className="text-xs font-bold text-slate-500 uppercase">Bot</label>
                                 <select
                                     value={selectedBotId}
                                     onChange={(e) => setSelectedBotId(e.target.value)}
-                                    className="w-full h-10 rounded-md border border-slate-200 px-3 text-sm"
+                                    className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm"
                                 >
                                     <option value="">{t('Seleccionar bot', 'Select bot')}</option>
                                     {dashboard.bots.map((bot) => (
@@ -915,7 +933,7 @@ export function QaLabPanel() {
                                 <select
                                     value={selectedSuiteId}
                                     onChange={(e) => setSelectedSuiteId(e.target.value)}
-                                    className="w-full h-10 rounded-md border border-slate-200 px-3 text-sm"
+                                    className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm"
                                 >
                                     <option value="">{t('Seleccionar suite', 'Select suite')}</option>
                                     {dashboard.suites.map((suite) => (
@@ -923,28 +941,28 @@ export function QaLabPanel() {
                                     ))}
                                 </select>
                             </div>
-                            <Button onClick={handleStartRun} className="h-10">
+                            <Button onClick={handleStartRun} className="h-11 rounded-2xl px-4 font-semibold">
                                 <Play className="mr-2 h-4 w-4" /> {t('Iniciar corrida', 'Start run')}
                             </Button>
-                            <Button variant="outline" onClick={() => refreshDashboard()}>
+                            <Button variant="outline" className="h-11 rounded-2xl border-slate-200 px-4 font-semibold" onClick={() => refreshDashboard()}>
                                 <RefreshCcw className="mr-2 h-4 w-4" /> {t('Actualizar', 'Refresh')}
                             </Button>
-                        </CardContent>
-                    </Card>
+                    </AdminPanel>
 
-                    <Card className="border-slate-200">
-                        <CardHeader>
-                            <CardTitle className="text-lg font-black flex items-center gap-2">
-                                <ShieldCheck className="h-4 w-4 text-primary" /> {t('OpenAI QA', 'OpenAI QA')}
-                            </CardTitle>
-                            <CardDescription>
-                                {t(
-                                    'Clave OpenAI unificada para Juez LLM y sincronización con Evals. Se guarda cifrada en DB.',
-                                    'Unified OpenAI key for LLM Judge and Evals sync. Stored encrypted in DB.',
-                                )}
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
+                    <AdminPanel
+                        variant="section"
+                        title={(
+                            <span className="inline-flex items-center gap-2">
+                                <ShieldCheck className="h-4 w-4 text-primary" />
+                                {t('OpenAI QA', 'OpenAI QA')}
+                            </span>
+                        )}
+                        description={t(
+                            'Clave OpenAI compartida para juez LLM y sincronizacion con Evals.',
+                            'Shared OpenAI key for the LLM judge and Evals sync.',
+                        )}
+                        contentClassName="space-y-4"
+                    >
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                                 <label className="flex items-center gap-2 text-sm">
                                     <input
@@ -963,6 +981,7 @@ export function QaLabPanel() {
                                         value={evalsSettings.namePrefix}
                                         onChange={(e) => setEvalsSettings((prev) => ({ ...prev, namePrefix: e.target.value }))}
                                         placeholder="QA Lab"
+                                        className="h-11 rounded-2xl border-slate-200 bg-white"
                                     />
                                 </div>
                                 <div className="space-y-1">
@@ -971,6 +990,7 @@ export function QaLabPanel() {
                                         value={evalsSettings.evalId}
                                         onChange={(e) => setEvalsSettings((prev) => ({ ...prev, evalId: e.target.value }))}
                                         placeholder="eval_..."
+                                        className="h-11 rounded-2xl border-slate-200 bg-white"
                                     />
                                 </div>
                             </div>
@@ -995,13 +1015,15 @@ export function QaLabPanel() {
                                             setEvalsApiKeyDirty(true);
                                         }}
                                         placeholder={evalsSettings.hasApiKey ? t('Guardada (oculta)', 'Saved (hidden)') : 'sk-...'}
+                                        className="h-11 rounded-2xl border-slate-200 bg-white font-mono text-sm"
                                     />
-                                    <Button type="button" variant="outline" onClick={handleToggleEvalsApiKeyVisibility}>
+                                    <Button type="button" variant="outline" className="h-11 rounded-2xl border-slate-200 px-3" onClick={handleToggleEvalsApiKeyVisibility}>
                                         {showEvalsApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                     </Button>
                                     <Button
                                         type="button"
                                         variant="outline"
+                                        className="h-11 rounded-2xl border-slate-200 px-3"
                                         onClick={handleCopyEvalsApiKey}
                                         disabled={!evalsSettings.hasApiKey}
                                     >
@@ -1016,36 +1038,32 @@ export function QaLabPanel() {
                             </div>
 
                             <div className="flex flex-wrap gap-2">
-                                <Button onClick={handleSaveEvalsSettings}>{t('Guardar OpenAI QA', 'Save OpenAI QA')}</Button>
-                                <Button variant="outline" onClick={handleClearEvalsApiKey}>
+                                <Button className="h-11 rounded-2xl px-4 font-semibold" onClick={handleSaveEvalsSettings}>{t('Guardar OpenAI QA', 'Save OpenAI QA')}</Button>
+                                <Button variant="outline" className="h-11 rounded-2xl border-slate-200 px-4 font-semibold" onClick={handleClearEvalsApiKey}>
                                     {t('Quitar API key', 'Clear API key')}
                                 </Button>
                             </div>
-                        </CardContent>
-                    </Card>
+                    </AdminPanel>
 
                     {selectedSuite && (
-                        <Card className="border-slate-200">
-                            <CardHeader>
-                                <CardTitle className="text-lg font-black flex items-center gap-2">
-                                    <ShieldCheck className="h-4 w-4 text-primary" /> {t('Configuración de suite', 'Suite Settings')}
-                                    <HelpTooltip
-                                        title={t('Umbrales', 'Thresholds')}
-                                        content={t(
-                                            'Definí límites de aprobación: pass rate mínimo, fallos críticos máximos, latencia y costo.',
-                                            'Define acceptance limits: minimum pass rate, max critical fails, latency, and cost.',
-                                        )}
-                                    />
-                                </CardTitle>
-                                <CardDescription>{t(`Umbrales de calidad y comportamiento de corrida para ${selectedSuite.name}.`, `Gate thresholds and run behavior for ${selectedSuite.name}.`)}</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
+                        <AdminPanel
+                            variant="section"
+                            title={(
+                                <span className="inline-flex items-center gap-2">
+                                    <ShieldCheck className="h-4 w-4 text-primary" />
+                                    {t('Configuracion de suite', 'Suite settings')}
+                                </span>
+                            )}
+                            description={t(`Umbrales y comportamiento de corrida para ${selectedSuite.name}.`, `Thresholds and run behavior for ${selectedSuite.name}.`)}
+                            contentClassName="space-y-4"
+                        >
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
                                     <div className="space-y-1">
                                         <label className="text-xs font-bold text-slate-500 uppercase">{t('Nombre', 'Name')}</label>
                                         <Input
                                             value={suiteEditor.name}
                                             onChange={(e) => setSuiteEditor((prev) => ({ ...prev, name: e.target.value }))}
+                                            className="h-11 rounded-2xl border-slate-200 bg-white"
                                         />
                                     </div>
                                     <div className="space-y-1">
@@ -1054,6 +1072,7 @@ export function QaLabPanel() {
                                             value={suiteEditor.botTypeScope}
                                             onChange={(e) => setSuiteEditor((prev) => ({ ...prev, botTypeScope: e.target.value }))}
                                             placeholder={t('SIMULATOR / EXAMINER / etc (opcional)', 'SIMULATOR / EXAMINER / etc (optional)')}
+                                            className="h-11 rounded-2xl border-slate-200 bg-white"
                                         />
                                     </div>
                                     <div className="space-y-1">
@@ -1061,55 +1080,56 @@ export function QaLabPanel() {
                                         <Input
                                             value={suiteEditor.description}
                                             onChange={(e) => setSuiteEditor((prev) => ({ ...prev, description: e.target.value }))}
+                                            className="h-11 rounded-2xl border-slate-200 bg-white"
                                         />
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                                     <div className="space-y-1">
                                         <label className="text-[11px] font-bold text-slate-500">{t('Pass rate mínimo', 'Min pass rate')}</label>
-                                        <Input value={suiteEditor.min_pass_rate} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, min_pass_rate: e.target.value }))} />
+                                        <Input className="h-11 rounded-2xl border-slate-200 bg-white" value={suiteEditor.min_pass_rate} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, min_pass_rate: e.target.value }))} />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[11px] font-bold text-slate-500">{t('Máx. fallos críticos', 'Max critical fails')}</label>
-                                        <Input value={suiteEditor.max_critical_failures} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, max_critical_failures: e.target.value }))} />
+                                        <Input className="h-11 rounded-2xl border-slate-200 bg-white" value={suiteEditor.max_critical_failures} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, max_critical_failures: e.target.value }))} />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[11px] font-bold text-slate-500">{t('Máx. hallazgos de seguridad', 'Max security findings')}</label>
-                                        <Input value={suiteEditor.max_security_findings} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, max_security_findings: e.target.value }))} />
+                                        <Input className="h-11 rounded-2xl border-slate-200 bg-white" value={suiteEditor.max_security_findings} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, max_security_findings: e.target.value }))} />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[11px] font-bold text-slate-500">{t('Máx. latencia promedio (ms)', 'Max avg latency ms')}</label>
-                                        <Input value={suiteEditor.max_avg_latency_ms} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, max_avg_latency_ms: e.target.value }))} />
+                                        <Input className="h-11 rounded-2xl border-slate-200 bg-white" value={suiteEditor.max_avg_latency_ms} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, max_avg_latency_ms: e.target.value }))} />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[11px] font-bold text-slate-500">{t('Máx. costo USD', 'Max cost USD')}</label>
-                                        <Input value={suiteEditor.max_total_cost_usd} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, max_total_cost_usd: e.target.value }))} />
+                                        <Input className="h-11 rounded-2xl border-slate-200 bg-white" value={suiteEditor.max_total_cost_usd} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, max_total_cost_usd: e.target.value }))} />
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
                                     <div className="space-y-1">
                                         <label className="text-[11px] font-bold text-slate-500">{t('Tamaño de lote', 'Batch size')}</label>
-                                        <Input value={suiteEditor.batch_size} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, batch_size: e.target.value }))} />
+                                        <Input className="h-11 rounded-2xl border-slate-200 bg-white" value={suiteEditor.batch_size} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, batch_size: e.target.value }))} />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[11px] font-bold text-slate-500">{t('Concurrencia', 'Concurrency')}</label>
-                                        <Input value={suiteEditor.concurrency} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, concurrency: e.target.value }))} />
+                                        <Input className="h-11 rounded-2xl border-slate-200 bg-white" value={suiteEditor.concurrency} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, concurrency: e.target.value }))} />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[11px] font-bold text-slate-500">{t('Reintentos', 'Retries')}</label>
-                                        <Input value={suiteEditor.max_retries_per_case} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, max_retries_per_case: e.target.value }))} />
+                                        <Input className="h-11 rounded-2xl border-slate-200 bg-white" value={suiteEditor.max_retries_per_case} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, max_retries_per_case: e.target.value }))} />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[11px] font-bold text-slate-500">{t('Modelo juez', 'Judge model')}</label>
-                                        <Input value={suiteEditor.llm_judge_model} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, llm_judge_model: e.target.value }))} />
+                                        <Input className="h-11 rounded-2xl border-slate-200 bg-white" value={suiteEditor.llm_judge_model} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, llm_judge_model: e.target.value }))} />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[11px] font-bold text-slate-500">{t('Temperatura juez', 'Judge temp')}</label>
-                                        <Input value={suiteEditor.llm_judge_temperature} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, llm_judge_temperature: e.target.value }))} />
+                                        <Input className="h-11 rounded-2xl border-slate-200 bg-white" value={suiteEditor.llm_judge_temperature} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, llm_judge_temperature: e.target.value }))} />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[11px] font-bold text-slate-500">{t('Presupuesto USD', 'Budget USD')}</label>
-                                        <Input value={suiteEditor.budget_usd} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, budget_usd: e.target.value }))} />
+                                        <Input className="h-11 rounded-2xl border-slate-200 bg-white" value={suiteEditor.budget_usd} onChange={(e) => setSuiteEditor((prev) => ({ ...prev, budget_usd: e.target.value }))} />
                                     </div>
                                 </div>
                                 <label className="flex items-center gap-2 text-sm">
@@ -1132,24 +1152,23 @@ export function QaLabPanel() {
                                     {t('Habilitar juez LLM para esta suite', 'Enable LLM Judge for this suite')}
                                 </label>
                                 <div className="flex flex-wrap gap-2">
-                                    <Button onClick={handleSaveSuite}>{t('Guardar suite', 'Save suite')}</Button>
-                                    <Button variant="outline" onClick={handleDeleteSuite}>
+                                    <Button className="h-11 rounded-2xl px-4 font-semibold" onClick={handleSaveSuite}>{t('Guardar suite', 'Save suite')}</Button>
+                                    <Button variant="outline" className="h-11 rounded-2xl border-slate-200 px-4 font-semibold" onClick={handleDeleteSuite}>
                                         <Trash2 className="mr-2 h-4 w-4" /> {t('Eliminar suite', 'Delete suite')}
                                     </Button>
                                 </div>
-                            </CardContent>
-                        </Card>
+                        </AdminPanel>
                     )}
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                <Card className="border-slate-200">
-                    <CardHeader>
-                        <CardTitle className="text-lg font-black">{t('Casos', 'Cases')}</CardTitle>
-                        <CardDescription>{t('Definiciones de prueba para la suite seleccionada.', 'Test definitions for the selected suite.')}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <AdminPanel
+                    variant="section"
+                    title={t('Casos', 'Cases')}
+                    description={t('Definiciones de prueba para la suite seleccionada.', 'Test definitions for the selected suite.')}
+                    contentClassName="space-y-4"
+                >
                         <div ref={casesTableRef} className="max-h-80 overflow-auto border border-slate-200 rounded-lg">
                             <table className="w-full text-xs">
                                 <thead className="bg-slate-50 border-b border-slate-200">
@@ -1178,36 +1197,37 @@ export function QaLabPanel() {
                             </table>
                         </div>
                         <div className="flex gap-2">
-                            <Button size="sm" onClick={handleCreateCase}>{t('Agregar caso', 'Add case')}</Button>
-                            <Button size="sm" variant="outline" onClick={() => selectedSuiteId && refreshSuiteDetail(selectedSuiteId)}>{t('Recargar', 'Reload')}</Button>
+                            <Button size="sm" className="rounded-xl px-3 font-semibold" onClick={handleCreateCase}>{t('Agregar caso', 'Add case')}</Button>
+                            <Button size="sm" variant="outline" className="rounded-xl border-slate-200 px-3 font-semibold" onClick={() => selectedSuiteId && refreshSuiteDetail(selectedSuiteId)}>{t('Recargar', 'Reload')}</Button>
                         </div>
                         {activeCase && (
-                            <div className="space-y-3 border border-slate-200 rounded-lg p-3 bg-slate-50/40">
+                            <div className="space-y-3 rounded-[22px] border border-slate-200 bg-slate-50/50 p-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                    <Input placeholder={t('Nombre del caso', 'Case name')} value={caseEditor.name} onChange={(e) => setCaseEditor((prev) => ({ ...prev, name: e.target.value }))} />
-                                    <Input placeholder={t('Descripción', 'Description')} value={caseEditor.description} onChange={(e) => setCaseEditor((prev) => ({ ...prev, description: e.target.value }))} />
+                                    <Input className="h-11 rounded-2xl border-slate-200 bg-white" placeholder={t('Nombre del caso', 'Case name')} value={caseEditor.name} onChange={(e) => setCaseEditor((prev) => ({ ...prev, name: e.target.value }))} />
+                                    <Input className="h-11 rounded-2xl border-slate-200 bg-white" placeholder={t('Descripción', 'Description')} value={caseEditor.description} onChange={(e) => setCaseEditor((prev) => ({ ...prev, description: e.target.value }))} />
                                 </div>
                                 <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                                    <select value={caseEditor.category} onChange={(e) => setCaseEditor((prev) => ({ ...prev, category: e.target.value as QaCaseCategory }))} className="h-10 rounded-md border border-slate-200 px-2 text-xs">
+                                    <select value={caseEditor.category} onChange={(e) => setCaseEditor((prev) => ({ ...prev, category: e.target.value as QaCaseCategory }))} className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-xs">
                                         <option value="FUNCTIONAL">FUNCTIONAL</option>
                                         <option value="EDGE">EDGE</option>
                                         <option value="SECURITY">SECURITY</option>
                                         <option value="REGRESSION">REGRESSION</option>
                                     </select>
-                                    <select value={caseEditor.severity} onChange={(e) => setCaseEditor((prev) => ({ ...prev, severity: e.target.value as QaSeverity }))} className="h-10 rounded-md border border-slate-200 px-2 text-xs">
+                                    <select value={caseEditor.severity} onChange={(e) => setCaseEditor((prev) => ({ ...prev, severity: e.target.value as QaSeverity }))} className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-xs">
                                         <option value="LOW">LOW</option>
                                         <option value="MEDIUM">MEDIUM</option>
                                         <option value="HIGH">HIGH</option>
                                         <option value="CRITICAL">CRITICAL</option>
                                     </select>
-                                    <select value={caseEditor.judgeMode} onChange={(e) => setCaseEditor((prev) => ({ ...prev, judgeMode: e.target.value as QaJudgeMode }))} className="h-10 rounded-md border border-slate-200 px-2 text-xs">
+                                    <select value={caseEditor.judgeMode} onChange={(e) => setCaseEditor((prev) => ({ ...prev, judgeMode: e.target.value as QaJudgeMode }))} className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-xs">
                                         <option value="DETERMINISTIC">DETERMINISTIC</option>
                                         <option value="LLM">LLM</option>
                                     </select>
-                                    <Input value={String(caseEditor.repeatCount)} onChange={(e) => setCaseEditor((prev) => ({ ...prev, repeatCount: Number(e.target.value) || 1 }))} placeholder={t('cantidad de repeticiones', 'repeat count')} />
-                                    <Input value={String(caseEditor.maxRetries)} onChange={(e) => setCaseEditor((prev) => ({ ...prev, maxRetries: Number(e.target.value) || 0 }))} placeholder={t('reintentos máximos', 'max retries')} />
+                                    <Input className="h-11 rounded-2xl border-slate-200 bg-white" value={String(caseEditor.repeatCount)} onChange={(e) => setCaseEditor((prev) => ({ ...prev, repeatCount: Number(e.target.value) || 1 }))} placeholder={t('cantidad de repeticiones', 'repeat count')} />
+                                    <Input className="h-11 rounded-2xl border-slate-200 bg-white" value={String(caseEditor.maxRetries)} onChange={(e) => setCaseEditor((prev) => ({ ...prev, maxRetries: Number(e.target.value) || 0 }))} placeholder={t('reintentos máximos', 'max retries')} />
                                 </div>
                                 <Textarea
+                                    className="rounded-2xl border-slate-200 bg-white px-4 py-3"
                                     value={caseEditor.judgePrompt}
                                     onChange={(e) => setCaseEditor((prev) => ({ ...prev, judgePrompt: e.target.value }))}
                                     placeholder={t('Rúbrica semántica (opcional)', 'Semantic rubric (optional)')}
@@ -1216,6 +1236,7 @@ export function QaLabPanel() {
                                 <div>
                                     <label className="text-[11px] font-bold text-slate-500">{t('Mensajes de entrada (uno por línea)', 'Input messages (one per line)')}</label>
                                     <Textarea
+                                        className="rounded-2xl border-slate-200 bg-white px-4 py-3"
                                         value={caseEditor.inputMessagesText}
                                         onChange={(e) => setCaseEditor((prev) => ({ ...prev, inputMessagesText: e.target.value }))}
                                         rows={4}
@@ -1227,26 +1248,28 @@ export function QaLabPanel() {
                                         value={caseEditor.expectedRulesText}
                                         onChange={(e) => setCaseEditor((prev) => ({ ...prev, expectedRulesText: e.target.value }))}
                                         rows={8}
-                                        className="font-mono text-xs"
+                                        className="rounded-2xl border-slate-200 bg-white px-4 py-3 font-mono text-xs"
                                     />
                                 </div>
                                 <div className="flex gap-2">
-                                    <Button size="sm" onClick={handleSaveCase}>{t('Guardar caso', 'Save case')}</Button>
-                                    <Button size="sm" variant="outline" onClick={handleDeleteCase}>{t('Eliminar caso', 'Delete case')}</Button>
+                                    <Button size="sm" className="rounded-xl px-3 font-semibold" onClick={handleSaveCase}>{t('Guardar caso', 'Save case')}</Button>
+                                    <Button size="sm" variant="outline" className="rounded-xl border-slate-200 px-3 font-semibold" onClick={handleDeleteCase}>{t('Eliminar caso', 'Delete case')}</Button>
                                 </div>
                             </div>
                         )}
-                    </CardContent>
-                </Card>
+                </AdminPanel>
 
-                <Card className="border-slate-200">
-                    <CardHeader>
-                        <CardTitle className="text-lg font-black flex items-center gap-2">
-                            <Activity className="h-4 w-4 text-primary" /> {t('Corridas', 'Runs')}
-                        </CardTitle>
-                        <CardDescription>{t('Historial, gate de calidad, procesamiento y exportación.', 'History, quality gate, processing, and export.')}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
+                <AdminPanel
+                    variant="section"
+                    title={(
+                        <span className="inline-flex items-center gap-2">
+                            <Activity className="h-4 w-4 text-primary" />
+                            {t('Corridas', 'Runs')}
+                        </span>
+                    )}
+                    description={t('Historial, gate de calidad, procesamiento y exportacion.', 'History, quality gate, processing and export.')}
+                    contentClassName="space-y-4"
+                >
                         <div className="max-h-80 overflow-auto border border-slate-200 rounded-lg">
                             <table className="w-full text-xs">
                                 <thead className="bg-slate-50 border-b border-slate-200">
@@ -1286,21 +1309,21 @@ export function QaLabPanel() {
                         </div>
 
                         {selectedRun && (
-                            <div className="space-y-3 border border-slate-200 rounded-lg p-3">
+                            <div className="space-y-3 rounded-[22px] border border-slate-200 bg-slate-50/50 p-4">
                                 <div className="flex flex-wrap gap-2">
-                                    <Button size="sm" variant="outline" onClick={() => handleProcessOneBatch(selectedRun.id)}>
+                                    <Button size="sm" variant="outline" className="rounded-xl border-slate-200 px-3 font-semibold" onClick={() => handleProcessOneBatch(selectedRun.id)}>
                                         {t('Procesar un lote', 'Process one batch')}
                                     </Button>
-                                    <Button size="sm" onClick={() => handleAutoProcess(selectedRun.id)} disabled={isProcessingRun}>
+                                    <Button size="sm" className="rounded-xl px-3 font-semibold" onClick={() => handleAutoProcess(selectedRun.id)} disabled={isProcessingRun}>
                                         {isProcessingRun ? t('Procesando...', 'Processing...') : t('Auto procesar', 'Auto process')}
                                     </Button>
-                                    <Button size="sm" variant="outline" onClick={handleCancelRun}>
+                                    <Button size="sm" variant="outline" className="rounded-xl border-slate-200 px-3 font-semibold" onClick={handleCancelRun}>
                                         {t('Cancelar corrida', 'Cancel run')}
                                     </Button>
-                                    <Button size="sm" variant="outline" onClick={() => exportRun('csv')}>
+                                    <Button size="sm" variant="outline" className="rounded-xl border-slate-200 px-3 font-semibold" onClick={() => exportRun('csv')}>
                                         <Download className="mr-2 h-3 w-3" /> CSV
                                     </Button>
-                                    <Button size="sm" variant="outline" onClick={() => exportRun('json')}>
+                                    <Button size="sm" variant="outline" className="rounded-xl border-slate-200 px-3 font-semibold" onClick={() => exportRun('json')}>
                                         <Download className="mr-2 h-3 w-3" /> JSON
                                     </Button>
                                 </div>
@@ -1379,17 +1402,16 @@ export function QaLabPanel() {
                                 )}
                             </div>
                         )}
-                    </CardContent>
-                </Card>
+                </AdminPanel>
             </div>
 
             {runDetail && (
-                <Card className="border-slate-200">
-                    <CardHeader>
-                        <CardTitle className="text-lg font-black">{t('Detalle de corrida', 'Run Detail')}</CardTitle>
-                        <CardDescription>{t('Casos fallidos/error más relevantes con diagnóstico rápido.', 'Top failing/error cases with quick diagnostics.')}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
+                <AdminPanel
+                    variant="section"
+                    title={t('Detalle de corrida', 'Run detail')}
+                    description={t('Casos fallidos o con error mas relevantes para revisar rapido.', 'Most relevant failed or error cases for a quick review.')}
+                    contentClassName="space-y-4"
+                >
                         <div className="text-xs text-slate-500">
                             {t('Run', 'Run')} {runDetail.id} • {runDetail.bot.name} • Gate {runDetail.gate_status}
                         </div>
@@ -1447,8 +1469,7 @@ export function QaLabPanel() {
                                 ))}
                             </div>
                         )}
-                    </CardContent>
-                </Card>
+                </AdminPanel>
             )}
         </div>
     );

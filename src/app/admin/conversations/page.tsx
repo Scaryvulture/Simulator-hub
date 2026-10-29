@@ -7,7 +7,6 @@ import { logout } from '@/app/actions/auth';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Search, User, ArrowRight, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -24,8 +23,9 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { usePathname } from 'next/navigation';
-import { ThemeToggle } from '@/components/providers/theme-toggle';
 import { LanguageSwitcher } from '@/components/providers/language-switcher';
+import { WorkspacePageHeader } from '@/components/workspace/workspace-page-header';
+import { WorkspacePanel } from '@/components/workspace/workspace-panel';
 
 type ConversationsData = Awaited<ReturnType<typeof getConversations>>;
 type ConversationSession = ConversationsData['sessions'][number];
@@ -63,7 +63,6 @@ export default function ConversationsPage() {
     const [exportDialogOpen, setExportDialogOpen] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
 
-    // Filter state
     const [from, setFrom] = useState('');
     const [to, setTo] = useState('');
     const [userSearch, setUserSearch] = useState('');
@@ -118,7 +117,6 @@ export default function ConversationsPage() {
             setIsExporting(true);
             const activeFilters = filtersRef.current;
 
-            // Check if at least one filter is active
             const hasFilter =
                 !!activeFilters.from ||
                 !!activeFilters.to ||
@@ -192,106 +190,123 @@ export default function ConversationsPage() {
     };
 
     if (isLoading && sessions.length === 0) {
-        return <div className="text-slate-400 font-bold animate-pulse uppercase tracking-widest text-xs p-20">{t.loading}</div>;
+        return <div className="workspace-empty-state animate-pulse">{t.loading}</div>;
     }
 
     return (
-        <div className="space-y-10 animate-in fade-in duration-700">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                <div>
-                    <h1 className="text-4xl font-black tracking-tighter text-slate-900 flex items-center gap-3">
-                        {t.conv_title}
-                    </h1>
-                    <p className="text-slate-500 mt-2 font-bold uppercase tracking-widest text-[10px]">{t.conv_desc}</p>
-                </div>
-                <div className="flex flex-wrap items-center justify-end gap-2 md:gap-3">
-                    <div className="text-sm text-slate-400 font-mono">
-                        {totalCount} {t.conv_messages.toLowerCase()}
+        <div className="space-y-8 animate-in fade-in duration-700">
+            <WorkspacePageHeader
+                variant="operations"
+                eyebrow={isUserViewer
+                    ? (lang === 'es' ? 'Historial' : 'History')
+                    : (lang === 'es' ? 'Seguimiento de sesiones' : 'Session tracking')}
+                title={t.conv_title}
+                description={t.conv_desc}
+                meta={(
+                    <>
+                        <span className="workspace-chip workspace-chip-muted">
+                            {totalCount} {t.conv_messages.toLowerCase()}
+                        </span>
+                        <span className={`workspace-chip ${viewerRole === 'USER' ? 'workspace-chip-muted' : 'workspace-chip-primary'}`}>
+                            {viewerRole}
+                        </span>
+                    </>
+                )}
+                actions={(
+                    <>
+                        {!isUserViewer && (
+                            <Button
+                                variant="outline"
+                                className="h-11 rounded-2xl border-slate-200 bg-white px-4 font-semibold"
+                                onClick={() => setExportDialogOpen(true)}
+                                disabled={isExporting || isLoading}
+                            >
+                                <Download className="mr-2 h-4 w-4" />
+                                {lang === 'es' ? 'Exportar XLSX' : 'Export XLSX'}
+                            </Button>
+                        )}
+                        {isStandaloneConversations ? (
+                            <>
+                                <Link href="/">
+                                    <Button variant="outline" className="h-11 rounded-2xl border-slate-200 bg-white px-4 font-semibold">
+                                        {lang === 'es' ? 'Volver al selector' : 'Back to simulators'}
+                                    </Button>
+                                </Link>
+                                <form action={logout}>
+                                    <Button variant="ghost" type="submit" className="h-11 rounded-2xl px-4 font-semibold text-slate-600 hover:bg-red-50 hover:text-red-600">
+                                        {lang === 'es' ? 'Cerrar sesión' : 'Log out'}
+                                    </Button>
+                                </form>
+                                <LanguageSwitcher />
+                            </>
+                        ) : null}
+                    </>
+                )}
+            />
+
+            <WorkspacePanel
+                variant="operations"
+                title={lang === 'es' ? 'Filtros' : 'Filters'}
+                description={lang === 'es'
+                    ? 'Fecha, bot y usuario para acotar el seguimiento.'
+                    : 'Date, bot, and user filters for review.'}
+            >
+                <form onSubmit={handleFilter} className={`grid grid-cols-1 ${isUserViewer ? 'md:grid-cols-3' : 'md:grid-cols-4'} gap-4`}>
+                    <div className="space-y-2">
+                        <label className="workspace-eyebrow">{t.conv_filter_date}</label>
+                        <div className="flex gap-2">
+                            <Input type="date" value={from} onChange={e => setFrom(e.target.value)} className="border-slate-200" />
+                            <Input type="date" value={to} onChange={e => setTo(e.target.value)} className="border-slate-200" />
+                        </div>
                     </div>
                     {!isUserViewer && (
-                        <Button
-                            variant="outline"
-                            className="h-10"
-                            onClick={() => setExportDialogOpen(true)}
-                            disabled={isExporting || isLoading}
+                        <div className="space-y-2">
+                            <label className="workspace-eyebrow">{t.conv_filter_user}</label>
+                            <div className="relative">
+                                <User className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                                <Input
+                                    value={userSearch}
+                                    onChange={e => setUserSearch(e.target.value)}
+                                    placeholder={viewerRole === 'ADMIN'
+                                        ? (lang === 'es' ? 'Usuario app o Totara User ID...' : 'App username or Totara User ID...')
+                                        : (lang === 'es' ? 'Totara User ID...' : 'Totara User ID...')}
+                                    className="pl-9 border-slate-200"
+                                />
+                            </div>
+                        </div>
+                    )}
+                    <div className="space-y-2">
+                        <label className="workspace-eyebrow">{t.conv_filter_bot}</label>
+                        <select
+                            value={botId}
+                            onChange={e => setBotId(e.target.value)}
+                            className="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/20"
                         >
-                            <Download className="mr-2 h-4 w-4" />
-                            {lang === 'es' ? 'Exportar XLSX' : 'Export XLSX'}
+                            <option value="all">{t.conv_filter_all}</option>
+                            {bots.map((b) => (
+                                <option key={b.id} value={b.id}>{b.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="flex items-end">
+                        <Button type="submit" className="h-10 w-full rounded-2xl font-semibold" disabled={isLoading}>
+                            <Search className="mr-2 h-4 w-4" /> {t.conv_filter_btn}
                         </Button>
-                    )}
-                    {isStandaloneConversations && (
-                        <>
-                            <Link href="/">
-                                <Button variant="outline" className="h-10 glass border-white/10 hover:bg-primary/10">
-                                    {lang === 'es' ? 'Volver al selector' : 'Back to simulators'}
-                                </Button>
-                            </Link>
-                            <form action={logout}>
-                                <Button variant="ghost" type="submit" className="h-10 text-slate-500 hover:text-red-600 hover:bg-red-50 font-bold">
-                                    {lang === 'es' ? 'Cerrar sesión' : 'Log out'}
-                                </Button>
-                            </form>
-                            <LanguageSwitcher />
-                            <ThemeToggle className="h-10 w-10 rounded-full shadow-sm" />
-                        </>
-                    )}
-                </div>
-            </div>
+                    </div>
+                </form>
+            </WorkspacePanel>
 
-            {/* Filters */}
-            <Card className="bg-white shadow-sm border-slate-200 rounded-2xl overflow-hidden">
-                <CardContent className="p-6">
-                    <form onSubmit={handleFilter} className={`grid grid-cols-1 ${isUserViewer ? 'md:grid-cols-3' : 'md:grid-cols-4'} gap-4`}>
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t.conv_filter_date}</label>
-                            <div className="flex gap-2">
-                                <Input type="date" value={from} onChange={e => setFrom(e.target.value)} className="border-slate-200" />
-                                <Input type="date" value={to} onChange={e => setTo(e.target.value)} className="border-slate-200" />
-                            </div>
-                        </div>
-                        {!isUserViewer && (
-                            <div className="space-y-2">
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t.conv_filter_user}</label>
-                                <div className="relative">
-                                    <User className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-                                    <Input
-                                        value={userSearch}
-                                        onChange={e => setUserSearch(e.target.value)}
-                                        placeholder={viewerRole === 'ADMIN'
-                                            ? (lang === 'es' ? 'Usuario app o Totara User ID...' : 'App username or Totara User ID...')
-                                            : (lang === 'es' ? 'Totara User ID...' : 'Totara User ID...')}
-                                        className="pl-9 border-slate-200"
-                                    />
-                                </div>
-                            </div>
-                        )}
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t.conv_filter_bot}</label>
-                            <select
-                                value={botId}
-                                onChange={e => setBotId(e.target.value)}
-                                className="w-full h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 text-slate-900"
-                            >
-                                <option value="all">{t.conv_filter_all}</option>
-                                {bots.map((b) => (
-                                    <option key={b.id} value={b.id}>{b.name}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div className="flex items-end">
-                            <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={isLoading}>
-                                <Search className="mr-2 h-4 w-4" /> {t.conv_filter_btn}
-                            </Button>
-                        </div>
-                    </form>
-                </CardContent>
-            </Card>
-
-            {/* Results Table */}
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+            <WorkspacePanel
+                variant="detail"
+                title={lang === 'es' ? 'Sesiones' : 'Sessions'}
+                description={lang === 'es'
+                    ? 'Listado operativo con acceso directo al detalle.'
+                    : 'Operational list with direct access to detail.'}
+                bodyClassName="p-0"
+            >
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left border-collapse">
-                        <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                        <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
                             <tr>
                                 <th className="px-6 py-4 font-bold tracking-widest">{t.conv_col_date}</th>
                                 <th className="px-6 py-4 font-bold tracking-widest">{t.conv_col_user}</th>
@@ -326,7 +341,7 @@ export default function ConversationsPage() {
                                         }
                                     );
                                     return (
-                                        <tr key={session.id} className="hover:bg-slate-50 transition-colors group">
+                                        <tr key={session.id} className="group transition-colors hover:bg-slate-50/80">
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="flex flex-col">
                                                     <span className="font-medium text-slate-900">
@@ -355,7 +370,7 @@ export default function ConversationsPage() {
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 hover:bg-primary/10">
+                                                <Badge variant="outline" className="rounded-full border-slate-200 bg-slate-50 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-100">
                                                     {session.bot?.name || (lang === 'es' ? 'Desconocido' : 'Unknown')}
                                                 </Badge>
                                             </td>
@@ -363,7 +378,7 @@ export default function ConversationsPage() {
                                                 {evalData ? (
                                                     <div className="flex flex-col items-center">
                                                         <Badge variant="outline" className={cn(
-                                                            "font-mono font-bold",
+                                                            "rounded-full px-3 py-1 font-mono font-bold",
                                                             evalData.percentage >= 70
                                                                 ? "bg-green-50 text-green-700 border-green-200"
                                                                 : "bg-amber-50 text-amber-700 border-amber-200"
@@ -380,7 +395,7 @@ export default function ConversationsPage() {
                                             </td>
                                             <td className="px-6 py-4 text-right">
                                                 <Link href={`${conversationsBasePath}/${session.id}`}>
-                                                    <Button size="sm" variant="ghost" className="hover:bg-primary hover:text-white">
+                                                    <Button size="sm" variant="outline" className="rounded-xl border-slate-200 bg-white font-semibold hover:bg-slate-50">
                                                         {t.conv_view} <ArrowRight className="ml-2 h-3 w-3" />
                                                     </Button>
                                                 </Link>
@@ -393,9 +408,8 @@ export default function ConversationsPage() {
                     </table>
                 </div>
 
-                {/* Pagination */}
                 {totalPages > 1 && (
-                    <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                    <div className="flex items-center justify-between border-t border-slate-200 bg-white px-6 py-4">
                         <div className="text-sm text-slate-500">
                             {t.conv_page} {page} {t.conv_of} {totalPages}
                         </div>
@@ -413,7 +427,7 @@ export default function ConversationsPage() {
                         </div>
                     </div>
                 )}
-            </div>
+            </WorkspacePanel>
 
             {!isUserViewer && (
                 <AlertDialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>

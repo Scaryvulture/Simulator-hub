@@ -3,11 +3,13 @@ import 'server-only';
 import type { Prisma } from '@prisma/client';
 
 import prisma from '@/lib/prisma';
+import { currentSessionOperation } from './session-operation-context';
 
 type MetadataObject = Record<string, unknown>;
 
 type LockedSessionRow = {
     metadata: unknown;
+    ended: boolean;
 };
 
 type SessionMetadataMutation<T> = {
@@ -34,10 +36,19 @@ export async function mutateSessionMetadata<T = void>(params: {
     mutate: (metadata: MetadataObject) => SessionMetadataMutation<T> | void;
 }): Promise<T | undefined> {
     const { sessionId, mutate } = params;
+    const operation = currentSessionOperation(sessionId);
+    if (operation) {
+        const draft = toSessionMetadataObject(operation.metadata);
+        const mutation = mutate(draft) || {};
+        if (mutation.skip) return mutation.result;
+        operation.metadata = mutation.metadata ?? draft;
+        operation.ended = operation.ended || mutation.ended === true;
+        return mutation.result;
+    }
 
     return prisma.$transaction(async (tx) => {
         const rows = await tx.$queryRaw<LockedSessionRow[]>`
-            SELECT metadata
+            SELECT metadata, ended
             FROM sessions
             WHERE id = ${sessionId}
             FOR UPDATE
@@ -59,7 +70,7 @@ export async function mutateSessionMetadata<T = void>(params: {
         await tx.session.update({
             where: { id: sessionId },
             data: {
-                ...(typeof mutation.ended === 'boolean' ? { ended: mutation.ended } : {}),
+                ...(typeof mutation.ended === 'boolean' ? { ended: row.ended || mutation.ended } : {}),
                 metadata: nextMetadata as Prisma.InputJsonValue,
             },
         });

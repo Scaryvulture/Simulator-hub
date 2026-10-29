@@ -1,3 +1,4 @@
+import { SessionOperationError } from '@/lib/session-operation-context';
 import { NextRequest, NextResponse } from 'next/server';
 import { Director } from '@/lib/director';
 import { getSessionActor } from '@/lib/auth-utils';
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
             introMessage: result.introMessage,
         });
     } catch (error: unknown) {
-        if (error instanceof AccessError) {
+        if (error instanceof AccessError || error instanceof SessionOperationError) {
             return NextResponse.json({ error: error.message }, { status: error.status });
         }
         if (error instanceof PayloadTooLargeError) {

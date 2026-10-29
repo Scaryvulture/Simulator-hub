@@ -24,23 +24,9 @@ export default async function LoginPage() {
 
             <div className="relative z-10 w-full max-w-md px-4">
                 <div className="flex flex-col items-center mb-10 space-y-4">
-                    <div className="rounded-2xl px-4 py-2 bg-white/80 dark:bg-slate-900/80 border border-slate-200/70 dark:border-slate-700/70">
-                        <Image
-                            src="/logo.svg"
-                            alt="Simulator Hub"
-                            width={220}
-                            height={60}
-                            className="object-contain dark:hidden"
-                            priority
-                        />
-                        <Image
-                            src="/logo.svg"
-                            alt="Simulator Hub"
-                            width={220}
-                            height={60}
-                            className="hidden object-contain dark:block"
-                            priority
-                        />
+                    <div className="flex items-center gap-3 rounded-2xl px-4 py-2 bg-white/80 dark:bg-slate-900/80 border border-slate-200/70 dark:border-slate-700/70">
+                        <Image src="/logo.svg" alt="" width={36} height={36} priority />
+                        <span className="brand-display text-xl font-black tracking-tight text-slate-900 dark:text-slate-100">Simulator Hub</span>
                     </div>
                     <div className="text-center">
                         <h1 className="brand-display text-3xl font-black tracking-tight text-slate-900 dark:text-slate-100">

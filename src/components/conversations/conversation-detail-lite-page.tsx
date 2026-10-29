@@ -13,10 +13,11 @@ import { runEvaluation } from '@/app/actions/evaluation';
 import { logout } from '@/app/actions/auth';
 import { useLanguage } from '@/components/providers/i18n-context';
 import { EvaluationReport } from '@/components/admin/evaluation-report';
-import { ThemeToggle } from '@/components/providers/theme-toggle';
 import { LanguageSwitcher } from '@/components/providers/language-switcher';
 import { isEvaluationResult, type ViewerEvaluationResult } from '@/lib/evaluation-result';
 import { getConversationUserDisplay } from '@/lib/conversation-user-display';
+import { WorkspacePageHeader } from '@/components/workspace/workspace-page-header';
+import { WorkspacePanel } from '@/components/workspace/workspace-panel';
 
 type ConversationDetail = NonNullable<Awaited<ReturnType<typeof getConversationDetail>>>;
 type EvaluationResult = ViewerEvaluationResult;
@@ -160,11 +161,11 @@ export default function ConversationDetailLitePage({ sessionId, backHref, showSt
     };
 
     if (isLoading) {
-        return <div className="text-slate-400 font-bold animate-pulse uppercase tracking-widest text-xs p-20">{t.loading}</div>;
+        return <div className="workspace-empty-state animate-pulse">{t.loading}</div>;
     }
 
     if (!session) {
-        return <div className="text-slate-400 font-bold p-20">{t.conv_empty}</div>;
+        return <div className="workspace-empty-state">{t.conv_empty}</div>;
     }
 
     const isAdminViewer = session.viewer_role === 'ADMIN';
@@ -185,87 +186,93 @@ export default function ConversationDetailLitePage({ sessionId, backHref, showSt
 
     return (
         <div className="space-y-6 animate-in fade-in duration-700">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div className="flex items-center gap-4">
-                    <Link href={backHref}>
-                        <Button variant="ghost" size="sm" className="hover:bg-slate-100 group text-slate-600">
-                            <ArrowLeft className="mr-2 h-4 w-4 group-hover:-translate-x-1 transition-transform" />
-                            {t.conv_back}
-                        </Button>
-                    </Link>
-                    <div className="w-px h-6 bg-slate-200" />
-                    <div className="flex items-center gap-2">
-                        <span className="font-black text-xl text-slate-900">{t.conv_session}</span>
-                        <Badge variant="outline" className="font-mono text-[10px] text-slate-400">
+            <WorkspacePageHeader
+                variant="detail"
+                eyebrow={lang === 'es' ? 'Detalle de sesión' : 'Session detail'}
+                title={(
+                    <div className="flex flex-wrap items-center gap-3">
+                        <span>{t.conv_session}</span>
+                        <Badge variant="outline" className="workspace-chip font-mono">
                             {session.id.slice(0, 8)}
                         </Badge>
                     </div>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-end gap-2 md:gap-4 text-sm">
-                    <span className="flex items-center gap-1.5 text-slate-500">
-                        <User className="w-4 h-4" />
-                        <span className="flex flex-col leading-tight">
-                            <span>{userDisplay.primary}</span>
-                            {userDisplay.secondary && (
-                                <span className="text-[11px] text-slate-400">{userDisplay.secondary}</span>
-                            )}
+                )}
+                description={lang === 'es'
+                    ? 'Resumen de la práctica y transcript de mensajes sin exponer paneles técnicos de administración.'
+                    : 'Practice summary and transcript without exposing technical admin panels.'}
+                meta={(
+                    <>
+                        <span className="workspace-chip">
+                            <User className="h-3.5 w-3.5" />
+                            {userDisplay.primary}
                         </span>
-                    </span>
-                    <span className="text-slate-300">|</span>
-                    <span className="flex items-center gap-1.5 text-primary font-bold">
-                        <Image src="/icons/assistant.svg" alt="Bot" width={16} height={16} className="h-4 w-4 object-contain" />
-                        {session.bot?.name || (lang === 'es' ? 'Desconocido' : 'Unknown')}
-                    </span>
-
-                    {canEvaluate && (
-                        <Button
-                            size="sm"
-                            variant={evaluationResult ? 'outline' : 'default'}
-                            onClick={handleEvaluateConversation}
-                            disabled={isEvaluating}
-                            className="h-8 text-xs font-bold"
-                        >
-                            {isEvaluating
-                                ? <RefreshCcw className="mr-2 h-3.5 w-3.5 animate-spin" />
-                                : <FileSignature className="mr-2 h-3.5 w-3.5" />}
-                            {isAdminViewer && evaluationResult
-                                ? (lang === 'es' ? 'Reevaluar' : 'Re-evaluate')
-                                : (lang === 'es' ? 'Evaluar' : 'Evaluate')}
-                        </Button>
-                    )}
-
-                    {evaluationResult && (
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={handleDownloadEvaluationPdf}
-                            disabled={isDownloadingPdf}
-                            className="h-8 text-xs font-bold"
-                        >
-                            <Download className={cn('mr-2 h-3.5 w-3.5', isDownloadingPdf && 'animate-pulse')} />
-                            {lang === 'es' ? 'Descargar PDF' : 'Download PDF'}
-                        </Button>
-                    )}
-
-                    {showStandaloneActions && (
-                        <>
-                            <Link href="/">
-                                <Button variant="outline" size="sm" className="h-8 text-xs font-bold glass border-white/10 hover:bg-primary/10">
-                                    {lang === 'es' ? 'Selector' : 'Simulators'}
-                                </Button>
-                            </Link>
-                            <form action={logout}>
-                                <Button variant="ghost" size="sm" type="submit" className="h-8 text-xs font-bold text-slate-500 hover:text-red-600 hover:bg-red-50">
-                                    {lang === 'es' ? 'Cerrar sesión' : 'Log out'}
-                                </Button>
-                            </form>
-                            <LanguageSwitcher />
-                            <ThemeToggle className="h-8 w-8 rounded-full shadow-sm" />
-                        </>
-                    )}
-                </div>
-            </div>
+                        {userDisplay.secondary ? (
+                            <span className="workspace-chip workspace-chip-muted">
+                                {userDisplay.secondary}
+                            </span>
+                        ) : null}
+                        <span className="workspace-chip workspace-chip-primary">
+                            <Image src="/icons/assistant.svg" alt="Bot" width={14} height={14} className="h-3.5 w-3.5 object-contain" />
+                            {session.bot?.name || (lang === 'es' ? 'Desconocido' : 'Unknown')}
+                        </span>
+                        <span className="workspace-chip workspace-chip-muted">
+                            <Calendar className="h-3.5 w-3.5" />
+                            {formatDate(session.created_at, lang)}
+                        </span>
+                    </>
+                )}
+                actions={(
+                    <>
+                        <Link href={backHref}>
+                            <Button variant="outline" className="h-11 rounded-2xl border-slate-200 bg-white px-4 font-semibold">
+                                <ArrowLeft className="mr-2 h-4 w-4" />
+                                {t.conv_back}
+                            </Button>
+                        </Link>
+                        {canEvaluate && (
+                            <Button
+                                variant={evaluationResult ? 'outline' : 'default'}
+                                onClick={handleEvaluateConversation}
+                                disabled={isEvaluating}
+                                className="h-11 rounded-2xl px-4 text-sm font-semibold"
+                            >
+                                {isEvaluating
+                                    ? <RefreshCcw className="mr-2 h-3.5 w-3.5 animate-spin" />
+                                    : <FileSignature className="mr-2 h-3.5 w-3.5" />}
+                                {isAdminViewer && evaluationResult
+                                    ? (lang === 'es' ? 'Reevaluar' : 'Re-evaluate')
+                                    : (lang === 'es' ? 'Evaluar' : 'Evaluate')}
+                            </Button>
+                        )}
+                        {evaluationResult && (
+                            <Button
+                                variant="outline"
+                                onClick={handleDownloadEvaluationPdf}
+                                disabled={isDownloadingPdf}
+                                className="h-11 rounded-2xl border-slate-200 bg-white px-4 text-sm font-semibold"
+                            >
+                                <Download className={cn('mr-2 h-3.5 w-3.5', isDownloadingPdf && 'animate-pulse')} />
+                                {lang === 'es' ? 'Descargar PDF' : 'Download PDF'}
+                            </Button>
+                        )}
+                        {showStandaloneActions ? (
+                            <>
+                                <Link href="/">
+                                    <Button variant="outline" className="h-11 rounded-2xl border-slate-200 bg-white px-4 font-semibold">
+                                        {lang === 'es' ? 'Selector' : 'Simulators'}
+                                    </Button>
+                                </Link>
+                                <form action={logout}>
+                                    <Button variant="ghost" type="submit" className="h-11 rounded-2xl px-4 font-semibold text-slate-600 hover:bg-red-50 hover:text-red-600">
+                                        {lang === 'es' ? 'Cerrar sesión' : 'Log out'}
+                                    </Button>
+                                </form>
+                                <LanguageSwitcher />
+                            </>
+                        ) : null}
+                    </>
+                )}
+            />
 
             <div className="space-y-6">
                 {evaluationResult && (
@@ -276,10 +283,18 @@ export default function ConversationDetailLitePage({ sessionId, backHref, showSt
                     />
                 )}
 
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 md:p-8 overflow-y-auto max-h-[72vh]">
+                <WorkspacePanel
+                    variant="transcript"
+                    title={lang === 'es' ? 'Transcript' : 'Transcript'}
+                    description={lang === 'es'
+                        ? 'Secuencia completa de mensajes de la sesión.'
+                        : 'Full message sequence for this session.'}
+                    className="overflow-hidden"
+                    bodyClassName="max-h-[72vh] overflow-y-auto p-6 md:p-8"
+                >
                     <div className="max-w-3xl mx-auto space-y-6">
                         <div className="flex items-center justify-center mb-8">
-                            <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 px-4 py-1">
+                            <Badge variant="outline" className="workspace-chip workspace-chip-primary px-4 py-1">
                                 <Calendar className="w-3 h-3 mr-2" />
                                 {t.conv_started_on} {formatDate(session.created_at, lang)}
                             </Badge>
@@ -354,7 +369,7 @@ export default function ConversationDetailLitePage({ sessionId, backHref, showSt
                             );
                         })}
                     </div>
-                </div>
+                </WorkspacePanel>
             </div>
         </div>
     );

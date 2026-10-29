@@ -12,6 +12,15 @@ const ADMIN_ONLY_METADATA_KEYS = [
     'evaluation_audit',
     'evaluation_log_access_audit',
     'runtime_block',
+    'runtime_snapshot',
+    'evaluation_history',
+    'examiner_state',
+    'detector_state',
+    'flow_state',
+    'session_vars',
+    'initialization_result',
+    '_requests',
+    '_operation',
     'lti_launch',
     'lti_outcome_sync',
 ] as const;
@@ -40,6 +49,8 @@ export function sanitizeConversationMetadataForViewer(rawMetadata: unknown, isAd
         }
         if (!isAdminViewer) {
             delete rawEvaluation.rag_trace;
+            delete rawEvaluation.evaluator_snapshot;
+            delete rawEvaluation.transcript_sha256;
         }
         if (isAdminViewer && shouldExpireRawLog) {
             rawEvaluation.raw_log_expired = true;

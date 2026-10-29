@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
+import { withSessionOperation } from '@/lib/session-operation';
+import { mutateSessionMetadata } from '@/lib/session-metadata';
+import { SessionOperationError } from '@/lib/session-operation-context';
 import { getSessionActor } from '@/lib/auth-utils';
 import { assertCanUseSessionForLiveChat, AccessError } from '@/lib/chat-access';
 import { isValidEntityId, isValidUuid } from '@/lib/request-validation';
@@ -27,14 +29,13 @@ export async function POST(
         const currentUser = await getSessionActor();
         await assertCanUseSessionForLiveChat({ sessionId, botId, user: currentUser });
 
-        await prisma.session.update({
-            where: { id: sessionId },
-            data: { ended: true },
-        });
+        await withSessionOperation(sessionId, 'end', () => mutateSessionMetadata({
+            sessionId, mutate: () => ({ ended: true }),
+        }));
 
         return NextResponse.json({ ok: true, ended: true });
     } catch (error: unknown) {
-        if (error instanceof AccessError) {
+        if (error instanceof AccessError || error instanceof SessionOperationError) {
             return NextResponse.json({ error: error.message }, { status: error.status });
         }
         console.error('Error ending session:', error);

@@ -1,3 +1,5 @@
+import { getRuntimeBot } from '@/lib/runtime-bot';
+import { toPublicBotResponse } from '@/lib/public-bot-contract';
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getSessionActor } from '@/lib/auth-utils';
@@ -23,6 +25,7 @@ export async function GET(
             where: { id: sessionId },
             select: {
                 ended: true,
+                bot_id: true,
                 metadata: true,
                 messages: {
                     orderBy: { created_at: 'asc' },
@@ -46,6 +49,7 @@ export async function GET(
         const evaluation = readStoredEvaluationFromMetadata(sanitizedMetadata);
 
         return NextResponse.json({
+            bot: session.bot_id ? toPublicBotResponse(await getRuntimeBot(session.bot_id, sessionId)) : null,
             messages: session.messages,
             ended: session.ended,
             evaluation: evaluation ? toPublicEvaluationResult(evaluation) : null,
