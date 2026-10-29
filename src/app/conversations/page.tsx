@@ -8,5 +8,12 @@ export default async function ProtectedConversationsPage() {
     if (!user) {
         redirect('/login');
     }
-    return <ConversationsPage />;
+
+    return (
+        <div className="workspace-canvas">
+            <main className="workspace-shell py-8 sm:py-10">
+                <ConversationsPage />
+            </main>
+        </div>
+    );
 }

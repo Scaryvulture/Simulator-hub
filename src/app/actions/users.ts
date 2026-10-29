@@ -597,10 +597,16 @@ export async function deleteUser(id: string) {
 
 export async function setPassword(id: string, password: string) {
     await verifyAdmin();
+    if (typeof password !== 'string' || password.length < 12 || Buffer.byteLength(password, 'utf8') > 72) {
+        throw new Error('La contraseña debe tener al menos 12 caracteres y no superar 72 bytes.');
+    }
     const passwordHash = await bcrypt.hash(password, 10);
-    await prisma.appUser.update({
-        where: { id },
-        data: { password_hash: passwordHash },
+    await prisma.$transaction(async (tx) => {
+        await tx.appUser.update({ where: { id }, data: { password_hash: passwordHash } });
+        await tx.authSession.updateMany({
+            where: { user_id: id, revoked_at: null },
+            data: { revoked_at: new Date(), revoke_reason: 'PASSWORD_RESET' },
+        });
     });
     revalidatePath('/admin/users');
     return { success: true };

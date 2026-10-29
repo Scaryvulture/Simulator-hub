@@ -1,3 +1,5 @@
+import { getRuntimeBot } from '@/lib/runtime-bot';
+import { SessionOperationError } from '@/lib/session-operation-context';
 import { NextRequest, NextResponse } from 'next/server';
 import { Director } from '@/lib/director';
 import { getSessionActor } from '@/lib/auth-utils';
@@ -11,7 +13,6 @@ import {
     PayloadTooLargeError,
 } from '@/lib/request-validation';
 import { toPublicChatResponse } from '@/lib/public-response-contract';
-import prisma from '@/lib/prisma';
 import { toPositiveInteger } from '@/lib/number-utils';
 import { logServerError } from '@/lib/server-log';
 type ChatImagePayload = {
@@ -86,6 +87,8 @@ export async function POST(req: NextRequest) {
         sessionId = payload?.sessionId;
         botId = payload?.botId;
         const message = payload?.message;
+        const requestId = payload?.requestId;
+        if (!isValidUuid(requestId)) return NextResponse.json({ error: 'A valid requestId is required' }, { status: 400 });
         const rawImages = Array.isArray(payload?.images) ? payload.images : [];
         const currentUser = await getSessionActor();
         const ip = getRequestIp(req);
@@ -177,10 +180,7 @@ export async function POST(req: NextRequest) {
 
         await assertCanUseSessionForLiveChat({ sessionId, botId, user: currentUser });
 
-        const bot = await prisma.bot.findFirst({
-            where: { id: botId, deleted_at: null },
-            select: { bot_type: true, config: true },
-        });
+        const bot = await getRuntimeBot(botId, sessionId);
         if (!bot) {
             return NextResponse.json({ error: 'Bot not found' }, { status: 404 });
         }
@@ -201,11 +201,11 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        const result = await Director.processMessage(sessionId, botId, normalizedMessage, images);
+        const result = await Director.processMessage(sessionId, botId, normalizedMessage, images, requestId);
 
         return NextResponse.json(toPublicChatResponse(result));
     } catch (error: unknown) {
-        if (error instanceof AccessError) {
+        if (error instanceof AccessError || error instanceof SessionOperationError) {
             return NextResponse.json({ error: error.message }, { status: error.status });
         }
         if (error instanceof PayloadTooLargeError) {

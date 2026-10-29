@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
+import { getRuntimeBot } from '@/lib/runtime-bot';
+import { estimateSttCost } from '@/lib/stt-cost';
 import { getSessionActor } from '@/lib/auth-utils';
 import { assertCanUseSessionForLiveChat, AccessError } from '@/lib/chat-access';
 import { checkRateLimit, getRequestIp } from '@/lib/rate-limit';
-import { isContentLengthOverLimit, isValidEntityId, isValidUuid } from '@/lib/request-validation';
+import { isContentLengthOverLimit, isValidEntityId, isValidUuid, readBodyWithLimit, PayloadTooLargeError } from '@/lib/request-validation';
 import { decrypt, isEncrypted } from '@/lib/crypto';
 import { appendVoiceAuditEvent } from '@/lib/voice-audit';
 import { toFile } from 'openai/uploads';
@@ -78,11 +79,11 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        const formData = await req.formData();
+        const boundedBody = await readBodyWithLimit(req, maxRequestBytes);
+        const formData = await new Response(new Uint8Array(boundedBody), { headers: { 'content-type': req.headers.get('content-type') || '' } }).formData();
         sessionId = typeof formData.get('sessionId') === 'string' ? String(formData.get('sessionId')) : '';
         botId = typeof formData.get('botId') === 'string' ? String(formData.get('botId')) : '';
         const modeRaw = typeof formData.get('mode') === 'string' ? String(formData.get('mode')) : 'normal';
-        const durationMsRaw = typeof formData.get('duration_ms') === 'string' ? String(formData.get('duration_ms')) : '0';
         const audioFile = formData.get('audio');
 
         if (!isValidUuid(sessionId) || !isValidEntityId(botId)) {
@@ -125,14 +126,7 @@ export async function POST(req: NextRequest) {
 
         await assertCanUseSessionForLiveChat({ sessionId, botId, user: actor });
 
-        const bot = await prisma.bot.findFirst({
-            where: { id: botId, deleted_at: null },
-            select: {
-                bot_type: true,
-                api_key: true,
-                config: true,
-            },
-        });
+        const bot = await getRuntimeBot(botId, sessionId);
 
         if (!bot?.api_key) {
             return NextResponse.json({ error: 'Bot API key is not configured.' }, { status: 400 });
@@ -173,10 +167,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'No speech detected.' }, { status: 400 });
         }
 
-        const parsedDurationMs = Math.max(0, Number.parseInt(durationMsRaw, 10) || 0);
-        const durationMs = parsedDurationMs > 0 ? parsedDurationMs : Math.round((audioFile.size / 16_000) * 1000);
-        const sttRatePerMinute = Number(process.env.OPENAI_STT_COST_PER_MINUTE || 0.006);
-        const costUsd = Number((((durationMs / 60_000) * sttRatePerMinute)).toFixed(6));
+        const { durationMs, costUsd, source: costSource } = estimateSttCost(response, audioFile.size, process.env.OPENAI_STT_COST_PER_MINUTE);
         const estimatedTokens = Math.max(1, Math.ceil(transcript.length / 4));
         const mode = modeRaw === 'realtime' ? 'realtime' : 'normal';
 
@@ -189,6 +180,7 @@ export async function POST(req: NextRequest) {
                 text_chars: transcript.length,
                 estimated_tokens: estimatedTokens,
                 cost_usd: costUsd,
+                cost_source: costSource,
                 latency_ms: latencyMs,
             });
         } catch (auditError) {
@@ -205,10 +197,11 @@ export async function POST(req: NextRequest) {
             model,
             estimated_tokens: estimatedTokens,
             cost_usd: costUsd,
+            cost_source: costSource,
         });
     } catch (error: unknown) {
-        if (error instanceof AccessError) {
-            return NextResponse.json({ error: error.message }, { status: error.status });
+        if (error instanceof AccessError || error instanceof PayloadTooLargeError) {
+            return NextResponse.json({ error: error.message }, { status: error instanceof AccessError ? error.status : 413 });
         }
         logServerError('api.chat.stt', error, { sessionId, botId });
         const status = extractSttStatus(error);

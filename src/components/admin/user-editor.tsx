@@ -59,14 +59,11 @@ export function UserEditor({ user, availableOrganizations }: Props) {
     const [username, setUsername] = useState(user.username);
     const [email, setEmail] = useState(user.email || '');
     const [role, setRole] = useState(user.role);
-    // Bot assignment is now strictly via Organization (or read-only legacy)
-    // const [selectedBotIds, setSelectedBotIds] = useState<string[]>(...); 
 
     const [selectedOrgIds, setSelectedOrgIds] = useState<string[]>(
         initialSelectedOrgIds
     );
     const [isSaving, setIsSaving] = useState(false);
-    // const [openBot, setOpenBot] = useState(false); // Removed
     const [openOrg, setOpenOrg] = useState(false);
     const [newPassword, setNewPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -83,7 +80,6 @@ export function UserEditor({ user, availableOrganizations }: Props) {
         try {
             setIsSaving(true);
             await setPassword(user.id, newPassword);
-            // setNewPassword(''); // Mantener visible a petición del usuario
             toast.success(lang === 'es' ? 'Contraseña actualizada' : 'Password updated');
         } catch (e: unknown) {
             toast.error(e instanceof Error ? e.message : 'Unknown error');
@@ -99,7 +95,6 @@ export function UserEditor({ user, availableOrganizations }: Props) {
                 username,
                 email,
                 role,
-                // botIds: selectedBotIds, // Removed direct assignment capability
                 orgIds: selectedOrgIds
             });
             toast.success(lang === 'es' ? 'Usuario actualizado' : 'User updated successfully');
@@ -111,8 +106,6 @@ export function UserEditor({ user, availableOrganizations }: Props) {
             setIsSaving(false);
         }
     };
-
-    // handleToggleBot removed
 
     const handleToggleOrg = (orgId: string) => {
         setSelectedOrgIds(prev =>
@@ -351,7 +344,6 @@ export function UserEditor({ user, availableOrganizations }: Props) {
                     </CardHeader>
                     <CardContent className="space-y-6 pt-8 px-8">
                         <div className="space-y-4">
-                            {/* Computed Access List */}
                             {(() => {
                                 const directBots = user.assignments?.map((a) => ({
                                     ...(a.bot || {}),
@@ -373,7 +365,6 @@ export function UserEditor({ user, availableOrganizations }: Props) {
                                 ) || [];
 
                                 const allAccess = [...directBots, ...orgBots];
-                                // Deduplicate by ID
                                 const uniqueAccess = Array.from(new Map(allAccess.map(item => [item?.id, item])).values()).filter(Boolean);
 
                                 if (uniqueAccess.length === 0) {
@@ -420,7 +411,6 @@ export function UserEditor({ user, availableOrganizations }: Props) {
                     </CardContent>
                 </Card>
 
-                {/* Organization Assignments */}
                 <Card className="bg-white shadow-sm border-slate-200 overflow-hidden rounded-3xl transition-all">
                     <CardHeader className="bg-slate-50 border-b border-slate-100 py-6 px-8">
                         <CardTitle className="text-slate-900 font-black text-lg flex items-center gap-2">
@@ -458,7 +448,7 @@ export function UserEditor({ user, availableOrganizations }: Props) {
                                                 {availableOrganizations.map((org) => (
                                                     <CommandItem
                                                         key={org.id}
-                                                        value={org.name} // Search by name
+                                                        value={org.name}
                                                         onSelect={() => handleToggleOrg(org.id)}
                                                         className="hover:bg-slate-50 transition-colors p-3 cursor-pointer"
                                                     >

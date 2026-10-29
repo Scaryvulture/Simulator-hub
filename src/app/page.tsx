@@ -1,16 +1,16 @@
-import { MessageSquare, Settings, LogOut, UserCircle } from 'lucide-react';
+import { LogOut, MessageSquare, Settings, UserCircle } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
+import { redirect } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { getCurrentUser } from '@/lib/auth-utils';
 import { logout } from '@/app/actions/auth';
 import prisma from '@/lib/prisma';
-import { redirect } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import Image from 'next/image';
 import { I18nText } from '@/components/providers/i18n-text';
 import { LanguageSwitcher } from '@/components/providers/language-switcher';
-import { ThemeToggle } from '@/components/providers/theme-toggle';
+import { WorkspacePageHeader } from '@/components/workspace/workspace-page-header';
+import { WorkspacePanel } from '@/components/workspace/workspace-panel';
 
 type HomeBot = {
     id: string;
@@ -110,101 +110,134 @@ export default async function HomePage() {
     const isUser = !isAdmin && !isOrgAdmin;
 
     return (
-        <div className="min-h-screen bg-background relative overflow-hidden">
-            {/* Background Accents */}
-            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 blur-[120px] rounded-full" />
-            <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-primary/5 blur-[120px] rounded-full" />
-
-            <nav className="sticky top-0 z-50 w-full border-b border-white/10 glass px-4 md:px-6">
-                <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 py-2 md:h-16 md:flex-row md:items-center md:justify-between md:py-0">
-                    <div className="flex items-center space-x-2 group">
-                        <div className="bg-white p-1 rounded-lg border border-slate-200 group-hover:shadow-[0_0_20px_rgba(var(--primary),0.3)] transition-all">
-                            <Image src="/logo.svg" alt="Logo" width={28} height={28} className="h-7 w-7 object-contain dark:hidden" />
-                            <Image src="/logo.svg" alt="Logo" width={28} height={28} className="hidden h-7 w-7 object-contain dark:block" />
+        <div className="workspace-canvas">
+            <nav className="workspace-topbar">
+                <div className="workspace-shell flex min-h-16 flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
+                            <Image src="/logo.svg" alt="Logo" width={28} height={28} className="h-7 w-7 object-contain" />
                         </div>
-                        <span className="font-bold text-xl tracking-tight">Simulator <span className="text-primary/70 font-light">Hub</span></span>
+                        <div className="min-w-0">
+                            <p className="workspace-eyebrow">Simulator Hub</p>
+                            <p className="truncate text-sm font-semibold text-slate-700">
+                                {currentUser.username}
+                            </p>
+                        </div>
                     </div>
 
-                    <div className="flex flex-1 items-center justify-center gap-2 md:gap-3">
-                        {isAdmin && (
-                            <Link href="/admin">
-                                <Button variant="outline" size="sm" className="glass border-white/10 hover:bg-primary/10">
-                                    <Settings className="mr-2 h-4 w-4" /> <I18nText es="Admin" en="Admin" />
-                                </Button>
-                            </Link>
-                        )}
-                        {isOrgAdmin && (
-                            <Link href="/conversations">
-                                <Button variant="outline" size="sm" className="glass border-white/10 hover:bg-primary/10">
-                                    <Settings className="mr-2 h-4 w-4" /> <I18nText es="Prácticas" en="Practices" />
-                                </Button>
-                            </Link>
-                        )}
-                        {isUser && (
-                            <Link href="/conversations">
-                                <Button variant="outline" size="sm" className="glass border-white/10 hover:bg-primary/10 min-w-28">
-                                    <MessageSquare className="mr-2 h-4 w-4" /> <I18nText es="Historial" en="History" />
-                                </Button>
-                            </Link>
-                        )}
-                    </div>
-
-                    <div className="flex items-center justify-end gap-2 sm:gap-3">
-                        <div className="hidden md:flex items-center space-x-2 text-sm text-muted-foreground bg-white/5 px-3 py-1 rounded-full border border-white/5">
-                            <UserCircle className="h-4 w-4" />
-                            <span>{currentUser.username}</span>
-                            {isAdmin && <Badge variant="secondary" className="bg-primary/20 text-primary text-[10px] py-0 px-2 h-4">ADMIN</Badge>}
-                            {isOrgAdmin && <Badge variant="secondary" className="bg-secondary text-primary text-[10px] py-0 px-2 h-4">ORG_ADMIN</Badge>}
-                        </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {isAdmin ? (
+                            <Badge variant="outline" className="workspace-chip workspace-chip-primary">
+                                ADMIN
+                            </Badge>
+                        ) : null}
+                        {isOrgAdmin ? (
+                            <Badge variant="outline" className="workspace-chip workspace-chip-primary">
+                                ORG_ADMIN
+                            </Badge>
+                        ) : null}
+                        {isUser ? (
+                            <Badge variant="outline" className="workspace-chip workspace-chip-muted">
+                                USER
+                            </Badge>
+                        ) : null}
+                        <LanguageSwitcher />
                         <form action={logout}>
-                            <Button variant="ghost" size="sm" type="submit" className="hover:text-destructive hover:bg-destructive/10">
-                                <LogOut className="mr-2 h-4 w-4" /> <I18nText es="Salir" en="Logout" />
+                            <Button variant="ghost" size="sm" type="submit" className="h-10 rounded-2xl px-3 font-semibold text-slate-600 hover:bg-red-50 hover:text-red-600">
+                                <LogOut className="mr-2 h-4 w-4" />
+                                <I18nText es="Salir" en="Logout" />
                             </Button>
                         </form>
-                        <LanguageSwitcher />
-                        <ThemeToggle className="h-9 w-9 rounded-full shadow-sm" />
                     </div>
                 </div>
             </nav>
 
-            <main className="container mx-auto py-16 px-6 relative z-10">
-                <div className="max-w-4xl mx-auto text-center mb-16 space-y-4">
-                    <h1 className="brand-display text-5xl lg:text-7xl font-extrabold tracking-tight bg-gradient-to-b from-foreground to-foreground/60 bg-clip-text text-transparent">
-                        <I18nText es="Elegí tu simulador" en="Choose Your Simulator" />
-                    </h1>
-                </div>
-
-                <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-                    {bots.map((bot) => (
-                        <Card key={bot.id} className="glass shadow-2xl border-white/5 hover:border-primary/40 transition-all group relative overflow-hidden flex flex-col">
-                            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                                <Image src="/icons/assistant.svg" alt="Brand icon" width={64} height={64} className="h-16 w-16 object-contain" />
-                            </div>
-                            <CardHeader className="relative">
-                                <CardTitle className="text-2xl font-bold group-hover:text-primary transition-colors">{bot.name}</CardTitle>
-                            </CardHeader>
-                            <CardContent className="mt-auto pt-6 border-t border-white/5 bg-white/5">
-                                <Link href={`/chat/${bot.id}?new=true`}>
-                                    <Button className="w-full h-12 text-lg font-semibold bg-primary hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-primary/20">
-                                        <MessageSquare className="mr-2 h-5 w-5" /> <I18nText es="Iniciar práctica" en="Start Practice" />
+            <main className="workspace-shell py-8 sm:py-10">
+                <WorkspacePageHeader
+                    variant="hub"
+                    eyebrow={<I18nText es="Acceso rápido" en="Quick access" />}
+                    title={<I18nText es="Tus simuladores" en="Your simulators" />}
+                    description={isAdmin
+                        ? <I18nText es="Vista general de acceso para lanzar prácticas o revisar el estado de publicación." en="Overview to launch practices or review publication status." />
+                        : <I18nText es="Entrá a tus prácticas disponibles desde un panel más claro y directo." en="Access your available practices from a clearer, more direct hub." />}
+                    meta={(
+                        <>
+                            <span className="workspace-chip">
+                                <UserCircle className="h-3.5 w-3.5" />
+                                {currentUser.username}
+                            </span>
+                            <span className="workspace-chip workspace-chip-muted">
+                                {bots.length} <I18nText es="simulador(es)" en="simulator(s)" />
+                            </span>
+                        </>
+                    )}
+                    actions={(
+                        <>
+                            {isAdmin ? (
+                                <Link href="/admin">
+                                    <Button variant="outline" className="h-11 rounded-2xl border-slate-200 bg-white px-4 font-semibold">
+                                        <Settings className="mr-2 h-4 w-4" />
+                                        <I18nText es="Admin" en="Admin" />
                                     </Button>
                                 </Link>
-                            </CardContent>
-                        </Card>
-                    ))}
-
-                    {bots.length === 0 && (
-                        <div className="col-span-full border-2 border-dashed border-white/10 rounded-3xl p-20 text-center glass">
-                            <div className="bg-primary/5 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
-                                <Image src="/icons/assistant.svg" alt="Brand icon" width={40} height={40} className="h-10 w-10 object-contain opacity-60" />
-                            </div>
-                            <h3 className="text-2xl font-bold text-muted-foreground/50"><I18nText es="Aún no tenés asignaciones" en="No Assignments Yet" /></h3>
-                            <p className="text-muted-foreground/40 mt-2">
-                                <I18nText es="Contactá a tu administrador para acceder a simuladores específicos." en="Contact your administrator to get access to specific simulators." />
-                            </p>
-                        </div>
+                            ) : null}
+                            {(isOrgAdmin || isUser) ? (
+                                <Link href="/conversations">
+                                    <Button variant="outline" className="h-11 rounded-2xl border-slate-200 bg-white px-4 font-semibold">
+                                        <MessageSquare className="mr-2 h-4 w-4" />
+                                        <I18nText es={isOrgAdmin ? 'Prácticas' : 'Historial'} en={isOrgAdmin ? 'Practices' : 'History'} />
+                                    </Button>
+                                </Link>
+                            ) : null}
+                        </>
                     )}
+                />
+
+                <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                    {bots.map((bot) => (
+                        <WorkspacePanel
+                            key={bot.id}
+                            variant="hub"
+                            title={bot.name}
+                            description={bot.published
+                                ? <I18nText es="Disponible para iniciar una práctica nueva." en="Available to start a new practice." />
+                                : <I18nText es="No publicado. Visible para revisión interna." en="Not published. Visible for internal review." />}
+                            bodyClassName="space-y-5"
+                        >
+                            <div className="flex items-center justify-between gap-3">
+                                <span className={`workspace-chip ${bot.published ? 'workspace-chip-primary' : 'workspace-chip-muted'}`}>
+                                    {bot.published ? <I18nText es="Publicado" en="Published" /> : <I18nText es="Borrador" en="Draft" />}
+                                </span>
+                                <span className="text-xs font-medium text-slate-500">
+                                    ID: {bot.id.slice(0, 8)}
+                                </span>
+                            </div>
+                            <Link href={`/chat/${bot.id}?new=true`} className="block">
+                                <Button className="h-11 w-full rounded-2xl px-4 text-sm font-semibold shadow-sm">
+                                    <MessageSquare className="mr-2 h-4 w-4" />
+                                    <I18nText es="Iniciar práctica" en="Start practice" />
+                                </Button>
+                            </Link>
+                        </WorkspacePanel>
+                    ))}
                 </div>
+
+                {bots.length === 0 ? (
+                    <div className="workspace-empty-state mt-8">
+                        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
+                            <Image src="/icons/assistant.svg" alt="Brand icon" width={28} height={28} className="h-7 w-7 object-contain opacity-70" />
+                        </div>
+                        <h2 className="mt-5 text-xl font-black text-slate-900">
+                            <I18nText es="Aún no tenés simuladores asignados" en="You do not have assigned simulators yet" />
+                        </h2>
+                        <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                            <I18nText
+                                es="Cuando tengas accesos, tus simuladores asignados van a aparecer acá para iniciar una práctica nueva."
+                                en="When you receive access, your assigned simulators will appear here so you can start a new practice."
+                            />
+                        </p>
+                    </div>
+                ) : null}
             </main>
         </div>
     );

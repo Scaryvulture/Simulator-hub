@@ -41,8 +41,8 @@ export async function POST(
         }
 
         const evaluation = readStoredEvaluationFromMetadata(session.metadata);
-        if (!evaluation) {
-            return NextResponse.json({ error: 'Evaluation not found for this session.' }, { status: 409 });
+        if (!evaluation?.transcript_sha256) {
+            return NextResponse.json({ error: 'Reevaluate this session before syncing its outcome.' }, { status: 409 });
         }
 
         const outcomeSync = await syncEvaluationToLtiOutcome({

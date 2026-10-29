@@ -108,11 +108,11 @@ function buildSecurityContext(request: NextRequest): SecurityContext {
         requestHeaders.delete('x-nonce')
     }
 
-    return {
-        cspHeaderKey: getCspHeaderKey(),
-        cspValue: buildCspValue({ isDev, nonce }),
-        requestHeaders,
-    }
+    const cspValue = buildCspValue({ isDev, nonce })
+    // Next extracts script nonces from the forwarded CSP, not from x-nonce.
+    requestHeaders.delete('content-security-policy-report-only')
+    requestHeaders.set('Content-Security-Policy', cspValue)
+    return { cspHeaderKey: getCspHeaderKey(), cspValue, requestHeaders }
 }
 
 function withSecurityHeaders(response: NextResponse, context: SecurityContext): NextResponse {

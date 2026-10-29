@@ -32,6 +32,8 @@ export interface ViewerEvaluationResult extends PublicEvaluationResult {
 }
 
 export interface StoredEvaluationResult extends ViewerEvaluationResult {
+    transcript_sha256?: string;
+    evaluator_snapshot?: unknown;
     rag_trace?: RagTrace;
     source?: string;
 }

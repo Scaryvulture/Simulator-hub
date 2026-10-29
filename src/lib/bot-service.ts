@@ -1,5 +1,5 @@
 import { BotConfig, BotConfigSchema } from './schemas/bot-config'
-import prisma from './prisma'
+import { getRuntimeBot } from './runtime-bot'
 import type { Bot } from '@prisma/client'
 import type { ZodError } from 'zod'
 import { collectBotConfigCompatibilityWarningMessages } from './bot-config-compat'
@@ -23,10 +23,8 @@ export class BotService {
     /**
    * Retrieves the bot and its validated configuration.
    */
-    static async getBot(botId: string): Promise<{ bot: Bot, config: BotConfig, validation: BotConfigValidation }> {
-        const bot = await prisma.bot.findFirst({
-            where: { id: botId, deleted_at: null },
-        })
+    static async getBot(botId: string, sessionId?: string): Promise<{ bot: Bot, config: BotConfig, validation: BotConfigValidation }> {
+        const bot = await getRuntimeBot(botId, sessionId)
 
         if (!bot) {
             throw new Error(`Bot with ID ${botId} not found`)

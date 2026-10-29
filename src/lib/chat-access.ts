@@ -106,6 +106,7 @@ export async function assertCanAccessSession(params: {
     }
 
     if (currentUser.role === 'ADMIN') return session;
+    if (session.external_user_id === currentUser.userId) return session;
 
     if (currentUser.hasOrgAdminAccess) {
         const sessionOrgId = session.organization_id;
@@ -151,6 +152,12 @@ export async function assertCanUseSessionForLiveChat(params: {
     user: ScopedSessionUser;
 }) {
     const session = await assertCanAccessSession(params);
+    if (!params.user || session.external_user_id !== params.user.userId) {
+        throw new AccessError('Only the session owner can operate this conversation', 403);
+    }
+    if (params.user.role !== 'ADMIN' && session.bot_id) {
+        await assertCanCreateSession(session.bot_id, params.user);
+    }
 
     if (!session.bot) {
         throw new AccessError('Bot not available', 404);

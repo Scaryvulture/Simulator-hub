@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { updateBot } from '@/app/actions/bots';
 import { toast } from 'sonner';
-import { ArrowLeft, Save, Code, Terminal, Key, Database, HelpCircle, Eye, EyeOff, Layout, BookOpen, ShieldCheck, Workflow, FileSignature, ImagePlus, X, ChevronDown, ChevronRight, Copy } from 'lucide-react';
+import { Terminal, Key, Database, HelpCircle, Eye, EyeOff, BookOpen, ShieldCheck, FileSignature, ImagePlus, X, Copy, Check, Code } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import helpData from '@/lib/field-help.json';
@@ -19,23 +19,15 @@ import { BotConfigSchema } from '@/lib/schemas/bot-config';
 import type { BotConfig } from '@/lib/schemas/bot-config';
 import { Switch } from '@/components/ui/switch';
 import { updateBotOrganizations } from '@/app/actions/organizations';
-import { BotOrgImportDialog } from '@/components/admin/bot-org-import-dialog';
 import { normalizeRagConfig } from '@/lib/rag-config';
-import { Check, ChevronsUpDown, Building } from 'lucide-react';
-import {
-    Command,
-    CommandEmpty,
-    CommandGroup,
-    CommandInput,
-    CommandItem,
-    CommandList,
-} from "@/components/ui/command"
 import { cn } from "@/lib/utils"
-import { Badge } from "@/components/ui/badge"
 import { VersionManager } from '@/components/admin/version-manager';
 import { useUnsavedChangesWarning } from '@/lib/use-unsaved-changes-warning';
 import { sanitizeImageTriggersForSave } from '@/lib/image-trigger-utils';
 import { buildFlowWarningDescription } from '@/lib/flow-lint-feedback';
+import { BotEditorHeader } from '@/components/admin/bot-editor-header';
+import { BotEditorOrganizationsCard } from '@/components/admin/bot-editor-organizations-card';
+import { BotEditorToolsCard } from '@/components/admin/bot-editor-tools-card';
 
 interface Props {
     bot: EditorBot;
@@ -212,7 +204,6 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
     const [toolsJsonText, setToolsJsonText] = useState(initialToolsJson);
     const [toolsJsonError, setToolsJsonError] = useState<string | null>(null);
 
-    // Organization Management State
     const [selectedOrgIds, setSelectedOrgIds] = useState<string[]>(
         initialSelectedOrgIds
     );
@@ -226,7 +217,6 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
         );
     };
 
-    // Pro Editor: local JSON text state (allows editing without constant rerender)
     const [proJsonText, setProJsonText] = useState('');
     const [proJsonError, setProJsonError] = useState<string | null>(null);
     const wasProModeRef = useRef(false);
@@ -272,7 +262,7 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
             store_queries: true,
             store_scores: true,
         },
-        // Legacy mirror fields
+        // Legacy top-level mirrors for older saved configs.
         top_k: 4,
         fallback_strategy: 'none',
         metadata_filters: {} as Record<string, string | number | boolean>,
@@ -280,7 +270,6 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
         max_evidence_tokens: 1200,
     };
 
-    // Sync proJsonText when switching TO Pro mode
     useEffect(() => {
         const isProfessional = viewMode === 'PROFESSIONAL';
         if (isProfessional && !wasProModeRef.current) {
@@ -302,7 +291,6 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
         setToolsJsonError(null);
     }, [viewMode, config.tools]);
 
-    // Parse Pro JSON when user edits it
     const handleProJsonChange = (text: string) => {
         setProJsonText(text);
         try {
@@ -314,7 +302,6 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
             if (val.orchestration?.vector_store !== undefined) setVectorStoreId(val.orchestration.vector_store);
             if (val.orchestration?.version !== undefined) setPromptVersion(String(val.orchestration.version));
 
-            // Validate Logic Layer against Schema
             if (val.logic_layer) {
                 const result = BotConfigSchema.safeParse(val.logic_layer);
                 if (!result.success) {
@@ -334,7 +321,6 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
         }
     };
 
-    // ========== VALIDATORS ==========
     const validators = {
         apiKey: (val: string) => !val || val.startsWith('sk-'),
         promptId: (val: string) => !val || val.startsWith('pmpt_'),
@@ -532,7 +518,7 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                     audit: {
                         ...normalized.audit,
                     },
-                    // Legacy mirror fields
+                    // Legacy top-level mirrors for older saved configs.
                     top_k: normalized.wrapper.top_k,
                     fallback_strategy: normalized.wrapper.fallback,
                     metadata_filters: normalized.wrapper.metadata_filters,
@@ -620,7 +606,6 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                 }
             }
 
-            // Update Organization Assignments
             const organizationUpdateResult = await updateBotOrganizations(bot.id, selectedOrgIds);
             if (!organizationUpdateResult.success) {
                 toast.error(organizationUpdateResult.error);
@@ -741,12 +726,12 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                     <HelpCircle className="h-3.5 w-3.5" />
                 </button>
             </PopoverTrigger>
-            <PopoverContent className="w-80 glass border-slate-200 p-4 shadow-2xl rounded-2xl animate-in zoom-in-95 duration-200 bg-white dark:bg-slate-900 dark:border-slate-700">
+            <PopoverContent className="w-80 rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-2xl animate-in zoom-in-95 duration-200">
                 <div className="space-y-2">
-                    <h4 className="font-bold text-slate-900 flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] dark:text-slate-100">
+                    <h4 className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-900">
                         <BookOpen className="h-3 w-3 text-primary" /> {lang === 'es' ? 'Guía técnica' : 'Technical Guide'}: {field.replace('_', ' ').toUpperCase()}
                     </h4>
-                    <p className="text-[11px] text-slate-600 leading-relaxed font-medium dark:text-slate-300">
+                    <p className="text-[11px] font-medium leading-relaxed text-slate-600">
                         {getHelpText(lang, field)}
                     </p>
                 </div>
@@ -754,7 +739,6 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
         </Popover>
     );
 
-    // Contextual translations (Internal labels)
     const labels = {
         es: {
             bot_config: "Configuración del Bot",
@@ -887,97 +871,49 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
     );
 
     return (
-        <div
-            className={cn(
-                "space-y-6 pb-20 animate-in fade-in duration-700",
-                "dark:[&_input]:bg-slate-900 dark:[&_input]:border-slate-700 dark:[&_input]:text-slate-100",
-                "dark:[&_textarea]:bg-slate-900 dark:[&_textarea]:border-slate-700 dark:[&_textarea]:text-slate-100",
-                "dark:[&_select]:bg-slate-900 dark:[&_select]:border-slate-700 dark:[&_select]:text-slate-100",
-                "dark:[&_.bg-white]:bg-slate-900 dark:[&_.bg-slate-50]:bg-slate-800/60",
-                "dark:[&_.text-slate-900]:text-slate-100 dark:[&_.text-slate-800]:text-slate-100 dark:[&_.text-slate-700]:text-slate-200 dark:[&_.text-slate-600]:text-slate-300 dark:[&_.text-slate-500]:text-slate-400 dark:[&_.text-slate-400]:text-slate-500",
-                "dark:[&_.border-slate-200]:border-slate-700 dark:[&_.border-slate-100]:border-slate-800"
-            )}
-        >
-            {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center space-x-4">
-                    <Link href="/admin">
-                        <Button variant="ghost" size="icon" className="group rounded-full bg-slate-100 hover:bg-slate-200 transition-all border border-slate-200">
-                            <ArrowLeft className="h-5 w-5 group-hover:-translate-x-0.5 transition-transform text-slate-600" />
-                        </Button>
-                    </Link>
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-[9px] font-black text-slate-500 uppercase tracking-widest border border-slate-200">
-                                {botType}
-                            </span>
-                        </div>
-                        <h1 className="text-3xl font-black tracking-tighter text-slate-900">
-                            {name || "Director #1"}
-                        </h1>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                    {hasUnsavedChanges && (
-                        <span className="text-[11px] font-bold text-primary">
-                            {lang === 'es' ? 'Cambios sin guardar' : 'Unsaved changes'}
-                        </span>
-                    )}
-                    <Button
-                        variant="outline"
-                        onClick={() => setViewMode(viewMode === 'STANDARD' ? 'PROFESSIONAL' : 'STANDARD')}
-                        className="bg-white border-slate-200 hover:bg-slate-50 rounded-xl px-6 h-12 transition-all font-bold text-xs text-slate-600"
-                    >
-                        {viewMode === 'STANDARD' ? (
-                            <><Code className="mr-2 h-4 w-4 text-primary" /> {labels.pro_view}</>
-                        ) : (
-                            <><Layout className="mr-2 h-4 w-4 text-primary" /> {labels.std_view}</>
-                        )}
-                    </Button>
-                    <Link href={`/admin/qa-lab?botId=${bot.id}`}>
-                        <Button
-                            variant="outline"
-                            className="bg-white border-slate-200 hover:bg-slate-50 rounded-xl px-6 h-12 transition-all font-bold text-xs text-slate-600"
-                        >
-                            <Workflow className="mr-2 h-4 w-4 text-primary" /> QA Lab
-                        </Button>
-                    </Link>
-                    <Button onClick={handleSave} disabled={isSaving} className="bg-primary hover:bg-primary/90 text-white shadow-xl shadow-primary/20 group h-12 px-10 rounded-xl transition-all font-black text-xs">
-                        {isSaving ? labels.sync : <><Save className="mr-2 h-5 w-5 group-hover:scale-110 transition-transform" /> {labels.save_assets}</>}
-                    </Button>
-                </div>
-            </div>
+        <div className={cn("space-y-6 pb-20 animate-in fade-in duration-700")}>
+            <BotEditorHeader
+                botId={bot.id}
+                botType={botType}
+                name={name}
+                lang={lang}
+                viewMode={viewMode}
+                hasUnsavedChanges={hasUnsavedChanges}
+                isSaving={isSaving}
+                saveLabel={labels.save_assets}
+                syncingLabel={labels.sync}
+                onToggleViewMode={() => setViewMode(viewMode === 'STANDARD' ? 'PROFESSIONAL' : 'STANDARD')}
+                onSave={handleSave}
+            />
 
             {viewMode === 'STANDARD' ? (
-                <div className="grid gap-6 lg:grid-cols-3">
-                    {/* Identity Card */}
+                <div className="grid gap-7 lg:grid-cols-3">
                     <div className="space-y-6 lg:col-span-1">
-                        <Card className="bg-white shadow-sm border-slate-200 overflow-hidden rounded-3xl group transition-all">
-                            <CardHeader className="bg-slate-50 border-b border-slate-100 py-5">
+                        <Card className="admin-editor-card group transition-all">
+                            <CardHeader className="admin-editor-card-header bg-gradient-to-r from-slate-50 via-slate-50/90 to-white">
                                 <CardTitle className="flex items-center gap-2 text-base font-black text-slate-900">
                                     <Key className="h-5 w-5 text-primary" /> {labels.basic_info}
                                 </CardTitle>
-                                <CardDescription className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">{labels.basic_desc}</CardDescription>
+                                <CardDescription className="admin-editor-note text-[10px] font-bold uppercase tracking-[0.18em]">{labels.basic_desc}</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-5 pt-7">
                                 <div className="space-y-2">
-                                    <Label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] flex items-center">
+                                    <Label className="admin-editor-label flex items-center">
                                         {labels.name} <HelpTrigger field="name" />
                                     </Label>
                                     <Input
                                         value={name}
                                         onChange={e => setName(e.target.value)}
-                                        className={getInputClassName(isNameValid, 'bg-slate-50 border-slate-200 h-12 rounded-xl text-slate-900 font-bold')}
+                                        className={getInputClassName(isNameValid, 'h-12 rounded-xl border-slate-200 bg-white text-slate-900 font-bold shadow-sm')}
                                     />
                                     {!isNameValid && <p className="text-[10px] text-red-500 font-medium">{validationMessages[lang].name}</p>}
                                 </div>
                                 <div className="space-y-2">
-                                    <Label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] flex items-center">
+                                    <Label className="admin-editor-label flex items-center">
                                         {labels.strategy} <HelpTrigger field="bot_type" />
                                     </Label>
                                     <select
-                                        className="w-full bg-slate-50 border border-slate-200 h-12 rounded-xl px-4 outline-none focus:ring-2 focus:ring-primary/20 text-sm text-slate-900 font-bold appearance-none transition-all"
+                                        className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-900 shadow-sm outline-none transition-all focus:ring-2 focus:ring-primary/15 h-12"
                                         value={botType}
                                         onChange={e => setBotType(e.target.value)}
                                     >
@@ -988,7 +924,7 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                     </select>
                                 </div>
                                 <div className="space-y-3">
-                                    <Label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] flex items-center">
+                                    <Label className="admin-editor-label flex items-center">
                                         {labels.api_key} <HelpTrigger field="api_key" />
                                     </Label>
                                     <div className="relative">
@@ -1006,7 +942,7 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                             placeholder={hasStoredApiKey
                                                 ? (apiKeyDisplay || (lang === 'es' ? 'Guardada (oculta)' : 'Saved (hidden)'))
                                                 : labels.api_placeholder}
-                                            className={getInputClassName(isApiKeyValid, 'bg-slate-50 border-slate-200 h-12 rounded-xl font-mono text-slate-900 pr-20')}
+                                            className={getInputClassName(isApiKeyValid, 'h-12 rounded-xl border-slate-200 bg-white pr-20 font-mono text-slate-900 shadow-sm')}
                                         />
                                         <button
                                             type="button"
@@ -1046,7 +982,7 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                     </div>
                                     {!isApiKeyValid && <p className="text-[10px] text-red-500 font-medium">{validationMessages[lang].apiKey}</p>}
                                 </div>
-                                <Label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] flex items-center">
+                                <Label className="admin-editor-label flex items-center">
                                     {lang === 'es' ? 'Logo del Bot' : 'Bot Logo'} <HelpTrigger field="name" />
                                 </Label>
 
@@ -1058,7 +994,7 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                                 <img
                                                     src={bot.logo || stringValue(config.logo_url)}
                                                     alt="Bot Logo"
-                                                    className="h-20 w-20 object-contain bg-slate-50 border border-slate-200 rounded-lg p-1"
+                                                    className="h-20 w-20 rounded-xl border border-slate-200 bg-white p-1.5 object-contain shadow-sm"
                                                 />
                                                 <Button
                                                     type="button"
@@ -1068,7 +1004,6 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                                     onClick={async () => {
                                                         if (confirm(lang === 'es' ? '¿Eliminar logo?' : 'Delete logo?')) {
                                                             try {
-                                                                // We need to handle both legacy URL and new Bytes
                                                                 if (bot.logo) {
                                                                     const deleteLogoResult = await import('@/app/actions/bots').then((m) => m.deleteBotLogo(bot.id));
                                                                     if (!deleteLogoResult.success) {
@@ -1091,7 +1026,7 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                                 </Button>
                                             </div>
                                         ) : (
-                                            <div className="h-20 w-20 bg-slate-50 border border-slate-200 border-dashed rounded-lg flex items-center justify-center text-slate-300">
+                                            <div className="flex h-20 w-20 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-slate-300">
                                                 <ImagePlus className="h-8 w-8" />
                                             </div>
                                         )}
@@ -1101,7 +1036,7 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                         <Input
                                             type="file"
                                             accept="image/png, image/jpeg, image/webp"
-                                            className="bg-slate-50 border-slate-200 h-10 text-xs text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                                            className="h-10 rounded-xl border-slate-200 bg-white text-xs text-slate-600 shadow-sm file:mr-4 file:rounded-full file:border-0 file:bg-primary/10 file:px-4 file:py-2 file:text-xs file:font-semibold file:text-primary hover:file:bg-primary/20"
                                             onChange={async (e) => {
                                                 const file = e.target.files?.[0];
                                                 if (!file) return;
@@ -1127,7 +1062,7 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                                 } catch (err) {
                                                     toast.error(getErrorMessage(err), { id: 'upload-logo' });
                                                 }
-                                                e.target.value = ''; // Reset input
+                                                e.target.value = '';
                                             }}
                                         />
                                         <p className="text-[10px] text-slate-400">
@@ -1136,23 +1071,23 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                                 : 'PNG, JPG, WEBP. Max 1MB. This logo will be used in the chat.'}
                                         </p>
                                         <div className="flex items-center gap-2">
-                                            <Label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                                            <Label className="admin-editor-label">
                                                 Legacy URL
                                             </Label>
                                             <Input
                                                 value={stringValue(config.logo_url)}
                                                 onChange={e => updateConfigField('logo_url', e.target.value)}
                                                 placeholder="https://..."
-                                                className="h-6 text-[10px] bg-transparent border-slate-100"
+                                                className="h-8 rounded-lg border-slate-200 bg-white text-[10px] shadow-sm"
                                             />
                                         </div>
                                     </div>
                                 </div>
-                                <div className="space-y-3 pt-2 border-t border-slate-100">
-                                    <Label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em]">
+                                <div className="space-y-3 border-t border-slate-100 pt-2">
+                                    <Label className="admin-editor-label">
                                         {lang === 'es' ? 'Capacidades del Chat' : 'Chat Capabilities'}
                                     </Label>
-                                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
+                                    <div className="admin-editor-subpanel space-y-3">
                                         <div className="flex items-center justify-between gap-3">
                                             <div>
                                                 <p className="text-[11px] font-bold text-slate-700">
@@ -1182,7 +1117,7 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                             />
                                         </div>
                                         {chatFeatures.allow_voice_output && (
-                                            <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-3">
+                                            <div className="rounded-2xl border border-slate-200 bg-white p-3 space-y-3 shadow-sm">
                                                 <div className="flex items-start gap-2 bg-slate-50 p-2 rounded-md border border-slate-100">
                                                     <HelpCircle className="h-4 w-4 text-primary shrink-0 mt-0.5" />
                                                     <p className="text-[10px] text-slate-500 leading-tight">
@@ -1229,13 +1164,12 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                             </CardContent>
                         </Card>
 
-                        {/* RAG/Prompts Card */}
-                        <Card className="bg-white shadow-sm border-slate-200 overflow-hidden rounded-3xl transition-all">
-                            <CardHeader className="bg-slate-50 border-b border-slate-100 py-5">
+                        <Card className="admin-editor-card transition-all">
+                            <CardHeader className="admin-editor-card-header bg-gradient-to-r from-slate-50 via-slate-50/90 to-white">
                                 <CardTitle className="flex items-center gap-2 text-base font-black text-slate-900">
                                     <Database className="h-5 w-5 text-primary" /> {labels.rag_prompts}
                                 </CardTitle>
-                                <CardDescription className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">
+                                <CardDescription className="admin-editor-note text-[10px] font-bold uppercase tracking-[0.18em]">
                                     {lang === 'es'
                                         ? 'Modo simple para operar RAG sin tocar JSON.'
                                         : 'Simple mode to operate RAG without JSON.'}
@@ -1243,14 +1177,14 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                             </CardHeader>
                             <CardContent className="space-y-4 pt-7">
                                 <div className="space-y-2">
-                                    <Label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] flex items-center">
+                                    <Label className="admin-editor-label flex items-center">
                                         {labels.m_prompt} <HelpTrigger field="openai_prompt_id" />
                                     </Label>
                                     <Input
                                         value={promptId}
                                         onChange={e => setPromptId(e.target.value)}
                                         placeholder="pmpt_xxxxx"
-                                        className={getInputClassName(isPromptIdValid, 'bg-slate-50 border-slate-200 h-11 rounded-xl font-mono text-xs text-slate-600')}
+                                        className={getInputClassName(isPromptIdValid, 'h-11 rounded-xl border-slate-200 bg-white font-mono text-xs text-slate-700 shadow-sm')}
                                     />
                                     {!isPromptIdValid && <p className="text-[10px] text-red-500 font-medium">{validationMessages[lang].promptId}</p>}
                                     <p className="text-[10px] text-slate-400">
@@ -1261,7 +1195,7 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] flex items-center">
+                                    <Label className="admin-editor-label flex items-center">
                                         {labels.m_model}
                                         <HelpTrigger field="llm_model" />
                                     </Label>
@@ -1269,7 +1203,7 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                         value={modelName}
                                         onChange={e => setModelName(e.target.value)}
                                         placeholder="gpt-4o"
-                                        className={getInputClassName(isModelValid, 'bg-slate-50 border-slate-200 h-11 rounded-xl font-mono text-xs text-slate-600')}
+                                        className={getInputClassName(isModelValid, 'h-11 rounded-xl border-slate-200 bg-white font-mono text-xs text-slate-700 shadow-sm')}
                                     />
                                     {!isModelValid && <p className="text-[10px] text-red-500 font-medium">{validationMessages[lang].model}</p>}
                                     <p className="text-[10px] text-slate-400">
@@ -1291,16 +1225,16 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                 </Button>
 
                                 {modelAdvancedOpen && (
-                                    <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                    <div className="admin-editor-subpanel space-y-4">
                                         <div className="space-y-2">
-                                            <Label className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em] flex items-center">
+                                            <Label className="admin-editor-label flex items-center">
                                                 {lang === 'es' ? 'Versión del Prompt' : 'Prompt Version'} <HelpTrigger field="prompt_version" />
                                             </Label>
                                             <Input
                                                 value={promptVersion}
                                                 onChange={e => setPromptVersion(e.target.value)}
                                                 placeholder="1"
-                                                className="bg-white border-slate-200 h-9 rounded-lg font-mono text-xs text-slate-700"
+                                                className="h-9 rounded-xl border-slate-200 bg-white font-mono text-xs text-slate-700 shadow-sm"
                                             />
                                             <p className="text-[10px] text-slate-400">
                                                 {lang === 'es'
@@ -1311,26 +1245,26 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
 
                                         <div className="grid grid-cols-2 gap-3">
                                             <div className="space-y-1">
-                                                <Label className="text-[10px] text-slate-500 font-bold">
+                                                <Label className="admin-editor-label">
                                                     {lang === 'es' ? 'Text format' : 'Text format'}
                                                 </Label>
                                                 <select
                                                     value={modelControls.text_format}
                                                     onChange={(e) => updateModelControl('text_format', e.target.value as ModelTextFormat)}
-                                                    className="w-full h-9 rounded border border-slate-200 bg-white px-2 text-xs"
+                                                    className="w-full h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs shadow-sm"
                                                 >
                                                     <option value="text">text</option>
                                                     <option value="json_object">json_object</option>
                                                 </select>
                                             </div>
                                             <div className="space-y-1">
-                                                <Label className="text-[10px] text-slate-500 font-bold">
+                                                <Label className="admin-editor-label">
                                                     {lang === 'es' ? 'Verbosity' : 'Verbosity'}
                                                 </Label>
                                                 <select
                                                     value={modelControls.verbosity}
                                                     onChange={(e) => updateModelControl('verbosity', e.target.value as ModelVerbosity)}
-                                                    className="w-full h-9 rounded border border-slate-200 bg-white px-2 text-xs"
+                                                    className="w-full h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs shadow-sm"
                                                 >
                                                     <option value="low">low</option>
                                                     <option value="medium">medium</option>
@@ -1338,13 +1272,13 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                                 </select>
                                             </div>
                                             <div className="space-y-1">
-                                                <Label className="text-[10px] text-slate-500 font-bold">
+                                                <Label className="admin-editor-label">
                                                     {lang === 'es' ? 'Reasoning effort' : 'Reasoning effort'}
                                                 </Label>
                                                 <select
                                                     value={modelControls.reasoning_effort}
                                                     onChange={(e) => updateModelControl('reasoning_effort', e.target.value as ModelReasoningEffort)}
-                                                    className="w-full h-9 rounded border border-slate-200 bg-white px-2 text-xs"
+                                                    className="w-full h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs shadow-sm"
                                                 >
                                                     <option value="none">none</option>
                                                     <option value="minimal">minimal</option>
@@ -1355,13 +1289,13 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                                 </select>
                                             </div>
                                             <div className="space-y-1">
-                                                <Label className="text-[10px] text-slate-500 font-bold">
+                                                <Label className="admin-editor-label">
                                                     {lang === 'es' ? 'Summary' : 'Summary'}
                                                 </Label>
                                                 <select
                                                     value={modelControls.summary}
                                                     onChange={(e) => updateModelControl('summary', e.target.value as ModelSummary)}
-                                                    className="w-full h-9 rounded border border-slate-200 bg-white px-2 text-xs"
+                                                    className="w-full h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs shadow-sm"
                                                 >
                                                     <option value="auto">auto</option>
                                                     <option value="concise">concise</option>
@@ -1370,9 +1304,9 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2">
+                                        <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
                                             <div>
-                                                <p className="text-[10px] font-bold text-slate-600">
+                                                <p className="admin-editor-label normal-case tracking-[0.16em]">
                                                     {lang === 'es' ? 'Store logs' : 'Store logs'}
                                                 </p>
                                                 <p className="text-[10px] text-slate-400">
@@ -1396,7 +1330,7 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                 <div className="pt-4 border-t border-slate-100 space-y-4">
                                     <div className="grid grid-cols-2 gap-3">
                                         <div className="space-y-2">
-                                            <Label className="text-[10px] text-slate-500 font-bold flex items-center gap-1">
+                                            <Label className="admin-editor-label flex items-center gap-1">
                                                 {lang === 'es' ? 'Modo RAG' : 'RAG Mode'}
                                                 <HelpTooltip
                                                     title={lang === 'es' ? 'Modo RAG' : 'RAG mode'}
@@ -1411,7 +1345,7 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                                     mode: e.target.value,
                                                     enabled: e.target.value !== 'never',
                                                 })}
-                                                className="w-full h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700"
+                                                className="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm"
                                             >
                                                 <option value="never">{lang === 'es' ? 'Nunca' : 'Never'}</option>
                                                 <option value="always">{lang === 'es' ? 'Siempre' : 'Always'}</option>
@@ -1420,7 +1354,7 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                             </select>
                                         </div>
                                         <div className="space-y-2">
-                                            <Label className="text-[10px] text-slate-500 font-bold flex items-center gap-1">
+                                            <Label className="admin-editor-label flex items-center gap-1">
                                                 {lang === 'es' ? 'Motor' : 'Engine'}
                                                 <HelpTooltip
                                                     title={lang === 'es' ? 'Motor RAG' : 'RAG engine'}
@@ -1432,7 +1366,7 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                             <select
                                                 value={ragConfig.owner}
                                                 onChange={(e) => updateRagConfig({ owner: e.target.value, rag_owner: e.target.value })}
-                                                className="w-full h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700"
+                                                className="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm"
                                             >
                                                 <option value="wrapper">{lang === 'es' ? 'Wrapper (controlado)' : 'Wrapper (controlled)'}</option>
                                                 <option value="platform">{lang === 'es' ? 'Platform (OpenAI)' : 'Platform (OpenAI)'}</option>
@@ -1482,7 +1416,7 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                                             if (index === 0) setVectorStoreId(e.target.value);
                                                         }}
                                                         placeholder="vs_abc123"
-                                                        className={getInputClassName(validators.vectorStoreId(id), 'bg-slate-50 border-slate-200 h-9 rounded-lg font-mono text-xs text-slate-700')}
+                                                        className={getInputClassName(validators.vectorStoreId(id), 'h-9 rounded-xl border-slate-200 bg-white font-mono text-xs text-slate-700 shadow-sm')}
                                                     />
                                                     <Button
                                                         type="button"
@@ -1503,7 +1437,7 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center justify-between rounded-xl border border-slate-200 p-3 bg-slate-50">
+                                    <div className="admin-editor-subpanel flex items-center justify-between">
                                         <div>
                                             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
                                                 {lang === 'es' ? 'Evidencia requerida' : 'Evidence required'}
@@ -1582,7 +1516,7 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                                     </Button>
 
                                     {ragAdvancedOpen && (
-                                        <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                        <div className="admin-editor-subpanel space-y-3">
                                             {ragConfig.owner === 'wrapper' ? (
                                                 <>
                                                     <div className="grid grid-cols-2 gap-3">
@@ -1734,20 +1668,19 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                         </Card>
                     </div >
 
-                    {/* Behavioral Instructions Card */}
                     < div className="lg:col-span-2 space-y-6" >
-                        <Card className="bg-white shadow-sm border-slate-200 overflow-hidden rounded-3xl h-full flex flex-col transition-all">
-                            <CardHeader className="bg-slate-100/50 border-b border-slate-100 flex flex-row items-center justify-between py-6 px-8">
+                        <Card className="admin-editor-card h-full flex flex-col transition-all">
+                            <CardHeader className="admin-editor-card-header flex flex-row items-center justify-between bg-gradient-to-r from-slate-50 via-slate-50/90 to-white py-6 px-8">
                                 <div>
                                     <CardTitle className="flex items-center gap-2 text-lg font-black text-slate-900">
                                         <Terminal className="h-5 w-5 text-primary" /> {labels.instr} <HelpTrigger field="instructions_prefix" />
                                     </CardTitle>
-                                    <CardDescription className="text-[11px] text-slate-500 font-medium">{labels.instr_desc}</CardDescription>
+                                    <CardDescription className="admin-editor-note">{labels.instr_desc}</CardDescription>
                                 </div>
                             </CardHeader>
                             <CardContent className="p-0 flex-1 flex flex-col">
                                 <textarea
-                                    className="flex-1 w-full min-h-[320px] bg-slate-50/30 p-8 font-mono text-sm text-slate-800 outline-none leading-relaxed resize-none selection:bg-primary/10"
+                                    className="flex-1 min-h-[340px] w-full resize-none bg-white px-8 py-8 font-mono text-sm leading-relaxed text-slate-800 outline-none selection:bg-primary/10"
                                     value={config.instructions_prefix || ''}
                                     onChange={e => updateConfigField('instructions_prefix', e.target.value)}
                                     placeholder={lang === 'es'
@@ -1758,7 +1691,6 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                         </Card>
                     </div >
 
-                    {/* Strategy-specific fields */}
                     < div className="lg:col-span-3" >
                         <StrategyFields
                             botType={botType}
@@ -1768,18 +1700,17 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                         />
                     </div >
 
-                    {/* Evaluation Assignment Card - FOR ALL STRATEGIES */}
                     {
                         (botType === 'SIMULATOR' || botType === 'DETECTOR' || botType === 'EXAMINER' || botType === 'ORCHESTRATOR') && (
                             <div className="lg:col-span-3">
-                                <Card className="bg-white border-slate-200 overflow-hidden rounded-3xl transition-all">
-                                    <CardHeader className="bg-slate-50 border-b border-slate-100 py-6 px-10">
+                                <Card className="admin-editor-card transition-all">
+                                    <CardHeader className="admin-editor-card-header bg-gradient-to-r from-slate-50 via-slate-50/90 to-white py-6 px-10">
                                         <div className="flex justify-between items-center">
                                             <div>
                                                 <CardTitle className="text-slate-900 font-black text-lg flex items-center gap-2">
                                                     <FileSignature className="h-5 w-5 text-primary" /> {lang === 'es' ? 'Evaluación Automática' : 'Automated Evaluation'}
                                                 </CardTitle>
-                                                <CardDescription className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">
+                                                <CardDescription className="admin-editor-note text-[10px] uppercase font-bold tracking-[0.18em]">
                                                     {lang === 'es' ? 'Asigna un bot de evaluación de conversación a esta sesión' : 'Assign a conversation-evaluator bot to this session'}
                                                 </CardDescription>
                                             </div>
@@ -1820,160 +1751,49 @@ export function BotEditor({ bot, availableOrganizations, availableEvaluators }: 
                         )
                     }
 
-                    {/* Tools - kept for all strategies */}
                     <div className="lg:col-span-3">
-                        <Card className="bg-white border-slate-200 overflow-hidden rounded-3xl transition-all">
-                            <CardHeader className="bg-slate-50 border-b border-slate-100 py-4 flex flex-row items-center justify-between px-6">
-                                <div className="flex items-center gap-2">
-                                    <CardTitle className="text-[10px] uppercase font-black tracking-[0.2em] text-slate-500">
-                                        {labels.tools}
-                                    </CardTitle>
-                                    <HelpTrigger field="tools" />
-                                </div>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-[10px] uppercase tracking-[0.16em] font-black text-slate-500 hover:text-slate-700 hover:bg-slate-100"
-                                    onClick={() => setToolsSectionOpen((prev) => !prev)}
-                                >
-                                    {toolsSectionOpen
-                                        ? (lang === 'es' ? 'Ocultar' : 'Hide')
-                                        : (lang === 'es' ? 'Editar' : 'Edit')}
-                                    {toolsSectionOpen ? <ChevronDown className="h-3.5 w-3.5 ml-1" /> : <ChevronRight className="h-3.5 w-3.5 ml-1" />}
-                                </Button>
-                            </CardHeader>
-                            {toolsSectionOpen && (
-                                <CardContent className="p-0">
-                                    <div className="px-5 pt-4 pb-2 text-[11px] text-slate-500 font-medium">
-                                        {lang === 'es'
-                                            ? 'Si este campo queda vacío, no se envía ningún tool a la API.'
-                                            : 'If this field is empty, no tools are sent to the API.'}
-                                    </div>
-                                    <textarea
-                                        className="w-full min-h-[180px] bg-white border-none px-5 pb-5 font-mono text-[10px] text-slate-600 outline-none"
-                                        value={toolsJsonText}
-                                        onChange={(e) => {
-                                            setToolsJsonText(e.target.value);
-                                            if (toolsJsonError) setToolsJsonError(null);
-                                        }}
-                                        onBlur={() => {
-                                            const parsedTools = parseToolsJsonForConfig(toolsJsonText);
-                                            if (parsedTools.error) {
-                                                setToolsJsonError(getToolsErrorText(parsedTools.error));
-                                                return;
-                                            }
-                                            setToolsJsonError(null);
-                                            setConfig((prev) => ({ ...prev, tools: parsedTools.tools }));
-                                            setToolsJsonText(formatToolsForEditor(parsedTools.tools));
-                                        }}
-                                        placeholder={lang === 'es'
-                                            ? '[\n  {\n    "type": "function",\n    "function": {\n      "name": "runtime.now",\n      "description": "Devuelve la fecha/hora actual",\n      "parameters": {\n        "type": "object",\n        "properties": {}\n      }\n    }\n  }\n]'
-                                            : '[\n  {\n    "type": "function",\n    "function": {\n      "name": "runtime.now",\n      "description": "Returns current datetime",\n      "parameters": {\n        "type": "object",\n        "properties": {}\n      }\n    }\n  }\n]'}
-                                    />
-                                    {toolsJsonError && (
-                                        <div className="px-5 pb-4 text-[11px] text-red-600 font-semibold">
-                                            {toolsJsonError}
-                                        </div>
-                                    )}
-                                </CardContent>
-                            )}
-                        </Card>
-                        {/* Organization Assignment Card */}
-                        <Card className="bg-white border-slate-200 overflow-hidden rounded-3xl transition-all mt-6">
-                            <CardHeader className="bg-slate-50 border-b border-slate-100 py-6 px-10">
-                                <div className="flex justify-between items-center">
-                                    <div>
-                                        <CardTitle className="text-slate-900 font-black text-lg flex items-center gap-2">
-                                            <Building className="h-5 w-5 text-primary" /> {lang === 'es' ? 'Distribución Organizacional' : 'Organization Distribution'}
-                                        </CardTitle>
-                                        <CardDescription className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">
-                                            {lang === 'es' ? 'Control de acceso multi-inquilino' : 'Multi-tenant access control'}
-                                        </CardDescription>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <BotOrgImportDialog botId={bot.id} onSuccess={() => {
-                                            // Optional: trigger revalidation or state update if needed, currently rely on server action revalidatePath
-                                        }} />
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent className="p-10 space-y-8">
-                                <div className="space-y-4">
-                                    <Label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] flex items-center">
-                                        {lang === 'es' ? 'Organizaciones Autorizadas' : 'Authorized Organizations'}
-                                    </Label>
-                                    <Popover open={openOrg} onOpenChange={setOpenOrg}>
-                                        <PopoverTrigger asChild>
-                                            <Button
-                                                variant="outline"
-                                                role="combobox"
-                                                aria-expanded={openOrg}
-                                                className="w-full h-12 justify-between bg-slate-50 border-slate-200 rounded-xl text-slate-600 font-bold"
-                                            >
-                                                {selectedOrgIds.length > 0
-                                                    ? `${selectedOrgIds.length} ${lang === 'es' ? 'organizaciones seleccionadas' : 'organizations selected'}`
-                                                    : (lang === 'es' ? "Seleccionar organizaciones..." : "Select organizations...")}
-                                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50 text-primary" />
-                                            </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-full p-0 bg-white shadow-2xl border-slate-200 rounded-2xl overflow-hidden mt-2">
-                                            <Command className="bg-white">
-                                                <CommandInput placeholder={lang === 'es' ? "Buscar organizaciones..." : "Search organizations..."} className="border-none focus:ring-0 text-slate-900 h-12 bg-slate-50" />
-                                                <CommandList className="max-h-60 custom-scroll">
-                                                    <CommandEmpty className="p-4 text-xs text-slate-400 italic">{lang === 'es' ? "No se encontraron organizaciones." : "No organizations found."}</CommandEmpty>
-                                                    <CommandGroup>
-                                                        {availableOrganizations.map((org) => (
-                                                            <CommandItem
-                                                                key={org.id}
-                                                                value={org.name}
-                                                                onSelect={() => handleToggleOrg(org.id)}
-                                                                className="hover:bg-slate-50 transition-colors p-3 cursor-pointer"
-                                                            >
-                                                                <Check
-                                                                    className={cn(
-                                                                        "mr-2 h-4 w-4 text-primary",
-                                                                        selectedOrgIds.includes(org.id) ? "opacity-100" : "opacity-0"
-                                                                    )}
-                                                                />
-                                                                <span className="text-xs font-bold text-slate-700">{org.name}</span>
-                                                            </CommandItem>
-                                                        ))}
-                                                    </CommandGroup>
-                                                </CommandList>
-                                            </Command>
-                                        </PopoverContent>
-                                    </Popover>
-                                </div>
-
-                                <div className="border border-slate-100 rounded-xl p-6 bg-slate-50/50 min-h-[100px]">
-                                    <div className="flex flex-wrap gap-3">
-                                        {selectedOrgIds.length === 0 && (
-                                            <p className="text-xs text-slate-400 italic">
-                                                {lang === 'es' ? 'No hay organizaciones asignadas.' : 'No organizations assigned.'}
-                                            </p>
-                                        )}
-                                        {selectedOrgIds.map(id => {
-                                            const org = availableOrganizations.find((o) => o.id === id);
-                                            return org ? (
-                                                <Badge key={id} variant="secondary" className="bg-white text-slate-700 border border-slate-200 py-2 px-4 rounded-xl flex items-center gap-2 font-black text-[10px] tracking-tight group transition-all hover:border-primary/30 hover:shadow-sm">
-                                                    {org.name}
-                                                    <button onClick={() => handleToggleOrg(id)} className="text-slate-400 hover:text-red-600 transition-colors ml-1 font-black leading-none group-hover:block">×</button>
-                                                </Badge>
-                                            ) : null;
-                                        })}
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-                        {/* Version Manager */}
+                        <BotEditorToolsCard
+                            lang={lang}
+                            open={toolsSectionOpen}
+                            value={toolsJsonText}
+                            error={toolsJsonError}
+                            helpTrigger={<HelpTrigger field="tools" />}
+                            onToggle={() => setToolsSectionOpen((prev) => !prev)}
+                            onChange={(value) => {
+                                setToolsJsonText(value);
+                                if (toolsJsonError) setToolsJsonError(null);
+                            }}
+                            onBlur={() => {
+                                const parsedTools = parseToolsJsonForConfig(toolsJsonText);
+                                if (parsedTools.error) {
+                                    setToolsJsonError(getToolsErrorText(parsedTools.error));
+                                    return;
+                                }
+                                setToolsJsonError(null);
+                                setConfig((prev) => ({ ...prev, tools: parsedTools.tools }));
+                                setToolsJsonText(formatToolsForEditor(parsedTools.tools));
+                            }}
+                        />
+                        <div className="mt-6">
+                            <BotEditorOrganizationsCard
+                                botId={bot.id}
+                                lang={lang}
+                                open={openOrg}
+                                selectedOrgIds={selectedOrgIds}
+                                availableOrganizations={availableOrganizations.map((org) => ({
+                                    id: org.id,
+                                    name: org.name,
+                                }))}
+                                onOpenChange={setOpenOrg}
+                                onToggleOrg={handleToggleOrg}
+                            />
+                        </div>
                         <div className="mt-6">
                             <VersionManager botId={bot.id} />
                         </div>
                     </div>
                 </div >
             ) : (
-                /* PRO LOGIC VIEW - High Contrast Professional Mode */
                 <div className="grid grid-cols-1 gap-6 pb-10">
                     <Card className="bg-[#0f172a] border-slate-700 overflow-hidden rounded-3xl shadow-2xl">
                         <CardHeader className="bg-slate-800 border-b border-slate-700 py-6 px-10 flex flex-row items-center justify-between">

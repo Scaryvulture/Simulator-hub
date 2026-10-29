@@ -1,7 +1,9 @@
+import { randomUUID } from 'node:crypto';
+import { withSessionOperation, readRuntimeSession } from './session-operation';
+import { currentSessionOperation, SessionOperationError } from './session-operation-context';
 import prisma from './prisma';
 import OpenAI from 'openai';
 import 'server-only';
-import { createHash } from 'node:crypto';
 import { decrypt, isEncrypted } from './crypto';
 import { safeRegex } from './safe-regex';
 import { FlowEngine, FlowConfig, FlowRagAction, FlowState } from './flow-engine';
@@ -40,24 +42,42 @@ import type { BotConfig } from './schemas/bot-config';
 
 import { PricingService } from './pricing';
 import { createOpenAIClient } from './ai-client';
-import { mutateSessionMetadata, toSessionMetadataObject } from './session-metadata';
+import {
+    detectGenericTerminalIntent,
+    extractSessionVarUpdates,
+    generateSessionVars,
+    getGenericClosingMessage,
+    getGenericGoodbyeMessage,
+    interpolateVars,
+    promptSessionVars,
+    withSessionVarUpdateProtocol,
+    type SessionVars,
+} from './director-session-vars';
+import {
+    executeRuntimeToolCall,
+    extractRuntimeToolCalls,
+    isLikelyReasoningModel,
+    sanitizeConfiguredTools,
+    type PlatformTraceOutputEntry,
+    type RawResponsesCreateResult,
+    type RuntimeToolCall,
+} from './director-runtime-tools';
+import {
+    processImageTriggers,
+    toStoredImageAttachments,
+    type UserImageAttachment,
+} from './director-images';
+import {
+    appendLlmPromptTrace,
+    appendRagTrace,
+    appendTriggerTraces,
+    blockSessionForInvalidConfig,
+    syncSessionVars,
+    updateSessionMetadataPreservingAudit,
+} from './director-metadata';
 
-type SessionVars = FlowState['vars'];
 type ChatRole = 'user' | 'assistant' | 'system';
 type HistoryItem = { role: ChatRole; content: string };
-type UserImageAttachment = {
-    mime_type: string;
-    data_url: string;
-};
-type StoredImageAttachment = {
-    mime_type: string;
-    byte_size: number;
-    sha256: string;
-    data_url?: string;
-    original_mime_type?: string;
-    original_byte_size?: number;
-    storage_mode?: 'full' | 'thumbnail' | 'metadata';
-};
 type UsageSummary = { prompt_tokens?: number; completion_tokens?: number } | null;
 type ResponseModelControls = {
     text_format: 'text' | 'json_object';
@@ -65,46 +85,6 @@ type ResponseModelControls = {
     verbosity: 'low' | 'medium' | 'high';
     summary: 'auto' | 'concise' | 'detailed';
     store_logs: boolean;
-};
-type SessionVarCandidate = {
-    type?: 'random' | 'fixed' | 'computed' | 'random_by';
-    options?: unknown[];
-    value?: unknown;
-    formula?: string;
-    values?: unknown[];
-    source_var?: string;
-    mapping?: Record<string, unknown>;
-};
-type PlatformTraceOutputContent = { type?: string; text?: string };
-type PlatformTraceOutputEntry = {
-    type?: string;
-    role?: string;
-    content?: PlatformTraceOutputContent[];
-    call_id?: string;
-    name?: string;
-    arguments?: string;
-    results?: Array<{
-        file_id?: string;
-        filename?: string;
-        score?: number;
-        content?: PlatformTraceOutputContent[];
-    }>;
-};
-type RuntimeToolCall = {
-    call_id: string;
-    name: string;
-    arguments: string;
-};
-type RawResponsesCreateResult = {
-    id?: string;
-    output_text?: string;
-    output?: PlatformTraceOutputEntry[];
-    usage?: {
-        input_tokens?: number;
-        prompt_tokens?: number;
-        output_tokens?: number;
-        completion_tokens?: number;
-    } & Record<string, unknown>;
 };
 
 const DEFAULT_RESPONSE_MODEL_CONTROLS: ResponseModelControls = {
@@ -120,8 +100,6 @@ export class Director {
     private static readonly PHRASE_FALLBACK_CACHE_TTL_MS = 10 * 60 * 1000;
     private static readonly PHRASE_FALLBACK_MAX_PER_TURN = 2;
     private static readonly PHRASE_FALLBACK_MAX_PER_INTENT_PER_TURN = 1;
-    private static readonly CHAT_IMAGE_THUMBNAIL_MAX_DIM = 192;
-    private static readonly CHAT_IMAGE_THUMBNAIL_QUALITY = 45;
     private static readonly TOOL_CALL_MAX_ROUNDS = 4;
     private static readonly SESSION_VAR_UPDATE_OPEN_TAG = '<SESSION_VARS_UPDATE>';
     private static readonly SESSION_VAR_UPDATE_CLOSE_TAG = '</SESSION_VARS_UPDATE>';
@@ -130,7 +108,6 @@ export class Director {
     private static readonly INVALID_CONFIG_REPLY = 'Este bot está temporalmente deshabilitado por configuración inválida. Contacta al administrador.';
     private static readonly EXAMINER_RUNTIME_FAILURE_REPLY = 'No pude continuar el examen porque falló una validación automática del modelo configurado. Revisá la configuración e intentá nuevamente.';
     private static phraseFallbackCache = new Map<string, { expiresAt: number; value: PhraseModelFallbackResult }>();
-    private static sharpModulePromise: Promise<unknown> | null = null;
 
     private static getPhraseFallbackCache(key: string): PhraseModelFallbackResult | null {
         const entry = this.phraseFallbackCache.get(key);
@@ -151,64 +128,6 @@ export class Director {
         if (this.phraseFallbackCache.size <= this.PHRASE_FALLBACK_CACHE_LIMIT) return;
         const oldestKey = this.phraseFallbackCache.keys().next().value;
         if (oldestKey) this.phraseFallbackCache.delete(oldestKey);
-    }
-
-    private static async getSharpFactory(): Promise<((input: Buffer) => {
-        rotate: () => {
-            resize: (
-                width: number,
-                height: number,
-                options: { fit: 'inside'; withoutEnlargement: boolean }
-            ) => {
-                webp: (options: { quality: number; effort: number }) => { toBuffer: () => Promise<Buffer> }
-            }
-        }
-    }) | null> {
-        if (!this.sharpModulePromise) {
-            this.sharpModulePromise = import('sharp').catch(() => null);
-        }
-        const moduleValue = await this.sharpModulePromise;
-        if (!moduleValue || typeof moduleValue !== 'object') return null;
-
-        const sharpFactory = (moduleValue as { default?: unknown }).default;
-        if (typeof sharpFactory !== 'function') return null;
-
-        return sharpFactory as (input: Buffer) => {
-            rotate: () => {
-                resize: (
-                    width: number,
-                    height: number,
-                    options: { fit: 'inside'; withoutEnlargement: boolean }
-                ) => {
-                    webp: (options: { quality: number; effort: number }) => { toBuffer: () => Promise<Buffer> }
-                }
-            }
-        };
-    }
-
-    private static async buildTinyThumbnailDataUrl(bytes: Buffer): Promise<{ dataUrl: string; byteSize: number } | null> {
-        const sharpFactory = await this.getSharpFactory();
-        if (!sharpFactory) return null;
-
-        try {
-            const thumbnailBytes = await sharpFactory(bytes)
-                .rotate()
-                .resize(
-                    this.CHAT_IMAGE_THUMBNAIL_MAX_DIM,
-                    this.CHAT_IMAGE_THUMBNAIL_MAX_DIM,
-                    { fit: 'inside', withoutEnlargement: true }
-                )
-                .webp({ quality: this.CHAT_IMAGE_THUMBNAIL_QUALITY, effort: 3 })
-                .toBuffer();
-
-            if (!thumbnailBytes.length) return null;
-            return {
-                dataUrl: `data:image/webp;base64,${thumbnailBytes.toString('base64')}`,
-                byteSize: thumbnailBytes.length,
-            };
-        } catch {
-            return null;
-        }
     }
 
     private static normalizeResponseModelControls(raw: unknown): ResponseModelControls {
@@ -248,22 +167,7 @@ export class Director {
     }
 
     private static async blockSessionForInvalidConfig(sessionId: string, botId: string, issues: string[]): Promise<void> {
-        await mutateSessionMetadata({
-            sessionId,
-            mutate: (metadata) => {
-                metadata.runtime_block = {
-                    reason: 'invalid_bot_config',
-                    bot_id: botId,
-                    issues: issues.slice(0, 10),
-                    blocked_at: new Date().toISOString(),
-                };
-
-                return {
-                    metadata,
-                    ended: true,
-                };
-            },
-        });
+        await blockSessionForInvalidConfig(sessionId, botId, issues);
     }
 
     private static resolveRuntimeStrategy(botType: string | null | undefined): RuntimeStrategy {
@@ -348,122 +252,20 @@ export class Director {
             || controls.store_logs !== DEFAULT_RESPONSE_MODEL_CONTROLS.store_logs;
     }
 
-    private static asRecord(value: unknown): Record<string, unknown> | null {
-        if (!value || typeof value !== 'object' || Array.isArray(value)) {
-            return null;
-        }
-        return value as Record<string, unknown>;
-    }
-
     private static sanitizeConfiguredTools(raw: unknown): Array<Record<string, unknown>> {
-        if (!Array.isArray(raw)) return [];
-
-        const sanitized: Array<Record<string, unknown>> = [];
-        for (const entry of raw) {
-            const tool = this.asRecord(entry);
-            if (!tool) continue;
-            if (tool.type !== 'function') continue;
-
-            const functionConfig = this.asRecord(tool.function);
-            if (!functionConfig) continue;
-            const name = typeof functionConfig.name === 'string' ? functionConfig.name.trim() : '';
-            if (!name) continue;
-
-            const normalizedFunction: Record<string, unknown> = { name };
-            if (typeof functionConfig.description === 'string' && functionConfig.description.trim()) {
-                normalizedFunction.description = functionConfig.description.trim();
-            }
-            const parameters = this.asRecord(functionConfig.parameters);
-            if (parameters) {
-                normalizedFunction.parameters = parameters;
-            }
-
-            sanitized.push({
-                type: 'function',
-                function: normalizedFunction,
-            });
-        }
-
-        return sanitized;
+        return sanitizeConfiguredTools(raw);
     }
 
     private static extractRuntimeToolCalls(response: RawResponsesCreateResult): RuntimeToolCall[] {
-        if (!Array.isArray(response.output)) return [];
-
-        const calls: RuntimeToolCall[] = [];
-        for (const entry of response.output) {
-            if (entry?.type !== 'function_call') continue;
-            const callId = typeof entry.call_id === 'string' ? entry.call_id : '';
-            const name = typeof entry.name === 'string' ? entry.name.trim() : '';
-            const argumentsText = typeof entry.arguments === 'string' ? entry.arguments : '{}';
-            if (!callId || !name) continue;
-            calls.push({
-                call_id: callId,
-                name,
-                arguments: argumentsText,
-            });
-        }
-        return calls;
-    }
-
-    private static parseToolArguments(rawArgs: string): Record<string, unknown> {
-        if (!rawArgs.trim()) return {};
-        try {
-            const parsed = JSON.parse(rawArgs);
-            return this.asRecord(parsed) || {};
-        } catch {
-            return {};
-        }
+        return extractRuntimeToolCalls(response);
     }
 
     private static executeRuntimeToolCall(call: RuntimeToolCall, sessionVars: SessionVars): string {
-        const name = call.name.trim().toLowerCase();
-        const args = this.parseToolArguments(call.arguments);
-
-        if (name === 'runtime.now' || name === 'get_current_datetime') {
-            return JSON.stringify({
-                ok: true,
-                now_iso: new Date().toISOString(),
-                unix_ms: Date.now(),
-            });
-        }
-
-        if (name === 'runtime.session_vars' || name === 'get_session_vars') {
-            const allVars = this.promptSessionVars(sessionVars || {});
-            const requestedKeys = Array.isArray(args.keys)
-                ? args.keys.filter((key): key is string => typeof key === 'string' && key.trim().length > 0)
-                : [];
-
-            const selectedVars = requestedKeys.length > 0
-                ? requestedKeys.reduce<Record<string, string>>((acc, key) => {
-                    if (typeof allVars[key] === 'string') {
-                        acc[key] = allVars[key];
-                    }
-                    return acc;
-                }, {})
-                : allVars;
-
-            return JSON.stringify({
-                ok: true,
-                session_vars: selectedVars,
-                available_keys: Object.keys(allVars),
-            });
-        }
-
-        return JSON.stringify({
-            ok: false,
-            error: `Tool "${call.name}" no está habilitada en runtime.`,
-            available_tools: ['runtime.now', 'runtime.session_vars'],
-        });
+        return executeRuntimeToolCall(call, sessionVars);
     }
 
     private static isLikelyReasoningModel(model: string): boolean {
-        const normalized = (model || '').trim().toLowerCase();
-        if (!normalized) return false;
-        return normalized.startsWith('o')
-            || normalized.startsWith('gpt-5')
-            || normalized.startsWith('chatgpt-5')
-            || normalized.startsWith('codex-5');
+        return isLikelyReasoningModel(model);
     }
 
     /**
@@ -471,7 +273,25 @@ export class Director {
      * Works for ALL bot types - generates intro before user's first message.
      */
     static async initSession(sessionId: string, botId: string): Promise<{ introMessage: string | null; flowState: FlowState; vars: SessionVars }> {
-        const { bot, config, validation } = await BotService.getBot(botId);
+        return withSessionOperation(sessionId, 'init', async () => {
+            const session = await readRuntimeSession(sessionId);
+            if (!session || session.bot_id !== botId) throw new SessionOperationError('Session does not match bot');
+            const metadata = (session.metadata || {}) as Record<string, unknown>;
+            if (session.ended) throw new SessionOperationError('La sesión ya está cerrada.');
+            if (metadata.initialization_result) return metadata.initialization_result as { introMessage: string | null; flowState: FlowState; vars: SessionVars };
+            if (metadata.flow_state || metadata.examiner_state || metadata.detector_state) {
+                const first = await prisma.message.findFirst({ where: { session_id: sessionId, role: 'assistant' }, orderBy: { created_at: 'asc' } });
+                const vars = (metadata.session_vars || {}) as SessionVars;
+                return { introMessage: first?.content || null, vars, flowState: (metadata.flow_state || { current_step: 'CONVERSATION', completed_steps: [], vars, ended: false }) as FlowState };
+            }
+            const result = await this.initSessionUnlocked(sessionId, botId);
+            await this.updateSessionMetadataPreservingAudit({ sessionId, patch: { initialized: true, initialization_result: result } });
+            return result;
+        });
+    }
+
+    private static async initSessionUnlocked(sessionId: string, botId: string): Promise<{ introMessage: string | null; flowState: FlowState; vars: SessionVars }> {
+        const { bot, config, validation } = await BotService.getBot(botId, sessionId);
         if (validation.block_runtime) {
             const flowState: FlowState = {
                 current_step: 'BLOCKED',
@@ -593,164 +413,31 @@ export class Director {
         sessionVarsConfig: unknown,
         variableRules?: Record<string, { depends_on: string; mappings: Record<string, string[]> }>
     ): SessionVars {
-        const vars: SessionVars = {};
-
-        if (!sessionVarsConfig || typeof sessionVarsConfig !== 'object') return vars;
-        const sessionVarsObject = sessionVarsConfig as Record<string, unknown>;
-
-        // First pass: generate independent vars
-        for (const [key, def] of Object.entries(sessionVarsObject)) {
-            const config = (def && typeof def === 'object') ? def as SessionVarCandidate : null;
-
-            // Handle new SessionVarConfig structure
-            if (config?.type) {
-                if (config.type === 'random' && Array.isArray(config.options) && config.options.length > 0) {
-                    vars[key] = config.options[Math.floor(Math.random() * config.options.length)] as SessionVars[string];
-                } else if (config.type === 'fixed') {
-                    vars[key] = (config.value ?? null) as SessionVars[string];
-                } else if (config.type === 'computed') {
-                    const formula = config.formula || '';
-                    // Simple formula support: random(min, max)
-                    if (formula && formula.startsWith('random(')) {
-                        const match = formula.match(/random\((\d+),\s*(\d+)\)/);
-                        if (match) {
-                            const min = parseInt(match[1]);
-                            const max = parseInt(match[2]);
-                            vars[key] = Math.floor(Math.random() * (max - min + 1)) + min;
-                        } else {
-                            vars[key] = formula;
-                        }
-                    } else {
-                        vars[key] = formula;
-                    }
-                } else if (config.type === 'random_by') {
-                    // Initialize as null, will be resolved in second pass
-                    vars[key] = null;
-                }
-            }
-            // Legacy/Simple structure support
-            else if (Array.isArray(config?.values) && config.values.length > 0) {
-                vars[key] = config.values[Math.floor(Math.random() * config.values.length)] as SessionVars[string];
-            } else if (Array.isArray(def) && def.length > 0) {
-                vars[key] = def[Math.floor(Math.random() * def.length)] as SessionVars[string];
-            } else if (typeof def === 'string' || typeof def === 'number' || typeof def === 'boolean') {
-                vars[key] = def;
-            }
-        }
-
-        // Second pass: generate vars WITH dependencies
-
-        // 1. Legacy variable_rules
-        if (variableRules) {
-            for (const [key, rule] of Object.entries(variableRules)) {
-                const dependsOnValue = vars[rule.depends_on];
-                if (!dependsOnValue) continue;
-
-                // Find matching mapping using regex
-                for (const [pattern, possibleValues] of Object.entries(rule.mappings)) {
-                    const regex = safeRegex(pattern);
-                    if (regex && regex.test(String(dependsOnValue))) {
-                        vars[key] = possibleValues[Math.floor(Math.random() * possibleValues.length)];
-                        break;
-                    }
-                }
-            }
-        }
-
-        // 2. New random_by type resolution
-        for (const [key, def] of Object.entries(sessionVarsObject)) {
-            const config = (def && typeof def === 'object') ? def as SessionVarCandidate : null;
-            if (
-                config
-                && config.type === 'random_by'
-                && typeof config.source_var === 'string'
-                && config.mapping
-            ) {
-                const mapping = config.mapping;
-                const sourceValue = vars[config.source_var];
-                // Only process if source variable has a value
-                if (sourceValue !== undefined && sourceValue !== null && sourceValue !== '') {
-                    // Check direct mapping first
-                    const options = mapping[String(sourceValue)];
-
-                    if (options && Array.isArray(options) && options.length > 0) {
-                        vars[key] = (options as Array<SessionVars[string]>)[Math.floor(Math.random() * options.length)];
-                    }
-                }
-            }
-        }
-
-        return vars;
+        return generateSessionVars(sessionVarsConfig, variableRules);
     }
 
     /**
      * Replace {varname} placeholders with actual values
      */
     private static interpolateVars(template: string, vars: SessionVars): string {
-        return template.replace(/\{(\w+)\}/g, (match, varName) => {
-            return vars[varName] !== undefined ? String(vars[varName]) : match;
-        });
-    }
-
-    private static isSessionVarPrimitive(value: unknown): value is string | number | boolean | null {
-        return value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+        return interpolateVars(template, vars);
     }
 
     private static extractSessionVarUpdates(
         content: string,
         currentVars: SessionVars
     ): { cleanContent: string; updates: SessionVars } {
-        if (!content) {
-            return { cleanContent: '', updates: {} };
-        }
-
-        const updates: SessionVars = {};
-        const allowedKeys = new Set(Object.keys(currentVars || {}));
-        const blockRegex = /<SESSION_VARS_UPDATE>\s*([\s\S]*?)\s*<\/SESSION_VARS_UPDATE>/gi;
-
-        let match: RegExpExecArray | null = null;
-        while ((match = blockRegex.exec(content)) !== null) {
-            const rawPayload = (match[1] || '').trim();
-            if (!rawPayload) continue;
-
-            try {
-                const parsed = JSON.parse(rawPayload);
-                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
-
-                for (const [key, value] of Object.entries(parsed)) {
-                    if (!allowedKeys.has(key)) continue;
-                    if (!this.isSessionVarPrimitive(value)) continue;
-                    updates[key] = value;
-                }
-            } catch {
-                continue;
-            }
-        }
-
-        const cleanContent = content
-            .replace(blockRegex, '')
-            .replace(/\n{3,}/g, '\n\n')
-            .trim();
-
-        return { cleanContent, updates };
+        return extractSessionVarUpdates(content, currentVars, {
+            openTag: this.SESSION_VAR_UPDATE_OPEN_TAG,
+            closeTag: this.SESSION_VAR_UPDATE_CLOSE_TAG,
+        });
     }
 
     private static withSessionVarUpdateProtocol(instructions: string, vars: SessionVars): string {
-        const varNames = Object.keys(vars || {});
-        if (varNames.length === 0) return instructions;
-
-        return [
-            instructions,
-            '',
-            '[CONTROL DE VARIABLES DE SESION]',
-            'Manten consistencia de variables en toda la conversacion.',
-            'Solo cambia una variable cuando el usuario realmente te convenza con argumentos.',
-            `Variables permitidas para actualizar: ${varNames.join(', ')}.`,
-            'Si actualizas variables, agrega al FINAL un bloque exacto como este:',
-            `${this.SESSION_VAR_UPDATE_OPEN_TAG}{"variable":"nuevo_valor"}${this.SESSION_VAR_UPDATE_CLOSE_TAG}`,
-            'Solo usa JSON valido con claves permitidas y valores primitivos (string, number, boolean o null).',
-            'No expliques ese bloque ni lo menciones al usuario.',
-        ].join('\n');
+        return withSessionVarUpdateProtocol(instructions, vars, {
+            openTag: this.SESSION_VAR_UPDATE_OPEN_TAG,
+            closeTag: this.SESSION_VAR_UPDATE_CLOSE_TAG,
+        });
     }
 
     private static withRagGroundingProtocol(params: {
@@ -778,20 +465,7 @@ export class Director {
     }
 
     private static promptSessionVars(vars: SessionVars): SessionVars {
-        const source = vars || {};
-        const next: SessionVars = {};
-
-        for (const [key, value] of Object.entries(source)) {
-            if (value === null || value === undefined) continue;
-            if (typeof value === 'string' && value.trim() === '') continue;
-            next[key] = value;
-        }
-
-        return next;
-    }
-
-    private static readMetadataRecord(rawMetadata: unknown): Record<string, unknown> {
-        return toSessionMetadataObject(rawMetadata);
+        return promptSessionVars(vars);
     }
 
     private static async updateSessionMetadataPreservingAudit(params: {
@@ -799,36 +473,11 @@ export class Director {
         ended?: boolean;
         patch: Record<string, unknown>;
     }): Promise<void> {
-        const { sessionId, ended, patch } = params;
-        await mutateSessionMetadata({
-            sessionId,
-            mutate: (metadata) => ({
-                metadata: {
-                    ...metadata,
-                    ...patch,
-                },
-                ended,
-            }),
-        });
+        await updateSessionMetadataPreservingAudit(params);
     }
 
     private static async syncSessionVars(sessionId: string, vars: SessionVars): Promise<void> {
-        await mutateSessionMetadata({
-            sessionId,
-            mutate: (metadata) => {
-                metadata.session_vars = vars;
-
-                if (metadata.flow_state && typeof metadata.flow_state === 'object' && !Array.isArray(metadata.flow_state)) {
-                    const flowState = metadata.flow_state as Record<string, unknown>;
-                    metadata.flow_state = {
-                        ...flowState,
-                        vars,
-                    };
-                }
-
-                return { metadata };
-            },
-        });
+        await syncSessionVars(sessionId, vars);
     }
 
     private static formatDeterministicReply(
@@ -840,71 +489,25 @@ export class Director {
         return content;
     }
 
-    private static normalizeIntentText(input: string): string {
-        return (input || '')
-            .toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-    }
-
     private static getGenericGoodbyeMessage(config: BotConfig): string {
-        if (typeof config.goodbye_message === 'string' && config.goodbye_message.trim()) {
-            return config.goodbye_message.trim();
-        }
-        return '';
+        return getGenericGoodbyeMessage(config);
     }
 
     private static getGenericClosingMessage(config: BotConfig): string {
-        if (typeof config.closing_message === 'string' && config.closing_message.trim()) {
-            return config.closing_message.trim();
-        }
-        return '';
-    }
-
-    private static matchesIntentPhrases(normalizedMessage: string, phrases: string[]): boolean {
-        if (!normalizedMessage || phrases.length === 0) return false;
-        const paddedMessage = ` ${normalizedMessage} `;
-        return phrases.some((rawPhrase) => {
-            const normalizedPhrase = this.normalizeIntentText(rawPhrase || '');
-            if (!normalizedPhrase) return false;
-            return normalizedMessage === normalizedPhrase || paddedMessage.includes(` ${normalizedPhrase} `);
-        });
+        return getGenericClosingMessage(config);
     }
 
     private static detectGenericTerminalIntent(message: string, config: BotConfig): 'GOODBYE' | 'CLOSING' | null {
-        const raw = (message || '').trim();
-        if (!raw) return null;
-        const genericInteraction = (config.generic_interaction && typeof config.generic_interaction === 'object')
-            ? config.generic_interaction
-            : undefined;
-        const ignoreQuestionMessages = genericInteraction?.ignore_question_messages !== false;
-        if (ignoreQuestionMessages && /[?¿]/.test(raw)) return null;
-        const normalized = this.normalizeIntentText(raw);
-        if (!normalized) return null;
-
-        const goodbyeSignals = Array.isArray(genericInteraction?.goodbye_intent_phrases)
-            ? genericInteraction.goodbye_intent_phrases
-            : [];
-        const closingSignals = Array.isArray(genericInteraction?.closing_intent_phrases)
-            ? genericInteraction.closing_intent_phrases
-            : [];
-
-        if (this.matchesIntentPhrases(normalized, goodbyeSignals)) {
-            return 'GOODBYE';
-        }
-
-        if (this.matchesIntentPhrases(normalized, closingSignals)) {
-            return 'CLOSING';
-        }
-
-        return null;
+        return detectGenericTerminalIntent(message, config);
     }
 
-    static async processMessage(sessionId: string, botId: string, userMessage: string, userImages: UserImageAttachment[] = []) {
-        const { bot: botEntity, config, validation } = await BotService.getBot(botId);
+    static async processMessage(sessionId: string, botId: string, userMessage: string, userImages: UserImageAttachment[] = [], requestId?: string) {
+        return withSessionOperation(sessionId, 'message', () => this.processMessageUnlocked(sessionId, botId, userMessage, userImages),
+            requestId ? { id: requestId, payload: { botId, userMessage, userImages } } : undefined);
+    }
+
+    private static async processMessageUnlocked(sessionId: string, botId: string, userMessage: string, userImages: UserImageAttachment[]) {
+        const { bot: botEntity, config, validation } = await BotService.getBot(botId, sessionId);
         const botData = botEntity;
         const strategy = this.resolveRuntimeStrategy(botData.bot_type);
         const userLogContent = userImages.length > 0
@@ -912,13 +515,9 @@ export class Director {
             : userMessage;
 
         // Check if session is already ended before processing a new turn
-        const session = await prisma.session.findUnique({
-            where: { id: sessionId },
-            select: { ended: true, metadata: true }
-        });
+        const session = await readRuntimeSession(sessionId);
 
         if (session?.ended) {
-            await this.logMessage(sessionId, 'user', userLogContent);
             return {
                 content: this.SESSION_ALREADY_ENDED_REPLY,
                 bypass: true,
@@ -1168,7 +767,6 @@ export class Director {
 
             // Check if session already ended
             if (flowState.ended) {
-                await this.logMessage(sessionId, 'user', userLogContent);
                 return {
                     content: this.SESSION_ALREADY_ENDED_REPLY,
                     bypass: true,
@@ -1292,10 +890,7 @@ export class Director {
             flowRagAction = flowResult.ragAction;
             sessionVars = flowResult.newState.vars || {};
         } else {
-            const sessionWithMeta = await prisma.session.findUnique({
-                where: { id: sessionId },
-                select: { metadata: true },
-            });
+            const sessionWithMeta = await readRuntimeSession(sessionId);
             const sessionMeta = (sessionWithMeta?.metadata && typeof sessionWithMeta.metadata === 'object' && !Array.isArray(sessionWithMeta.metadata))
                 ? sessionWithMeta.metadata as Record<string, unknown>
                 : {};
@@ -1324,10 +919,7 @@ export class Director {
                 if (baseMessage) {
                     const terminalContent = this.formatDeterministicReply(baseMessage, config.image_triggers);
 
-                    await prisma.session.update({
-                        where: { id: sessionId },
-                        data: { ended: true },
-                    });
+                    await this.updateSessionMetadataPreservingAudit({ sessionId, ended: true, patch: {} });
                     await this.persistDeterministicReply({
                         sessionId,
                         userLogContent,
@@ -1621,136 +1213,27 @@ export class Director {
         response: string,
         triggers?: Array<{ pattern: string; image_url: string; caption?: string }>
     ): string {
-        if (!triggers || triggers.length === 0) {
-            return response;
-        }
-
-        const matchedImages: string[] = [];
-        const isLikelyImageUrl = (url: string) => {
-            const clean = (url || '').toLowerCase().split('?')[0];
-            return (
-                clean.endsWith('.png')
-                || clean.endsWith('.jpg')
-                || clean.endsWith('.jpeg')
-                || clean.endsWith('.gif')
-                || clean.endsWith('.webp')
-                || clean.endsWith('.svg')
-                || clean.includes('/image/')
-            );
-        };
-
-        for (const trigger of triggers) {
-            try {
-                const pattern = (trigger.pattern || '').trim();
-                const imageUrl = (trigger.image_url || '').trim();
-                if (!pattern || !imageUrl) {
-                    continue;
-                }
-
-                const regex = safeRegex(pattern);
-                if (regex && regex.test(response)) {
-                    const caption = trigger.caption || '';
-                    if (isLikelyImageUrl(imageUrl)) {
-                        matchedImages.push(`\n\n![${caption}](${imageUrl})`);
-                    } else {
-                        const line = caption ? `${caption}\n${imageUrl}` : imageUrl;
-                        matchedImages.push(`\n\n${line}`);
-                    }
-                }
-            } catch {
-                // Invalid regex, skip
-                console.warn(`Invalid image trigger regex: ${trigger.pattern}`);
-            }
-        }
-
-        if (matchedImages.length > 0) {
-            return response + matchedImages.join('');
-        }
-
-        return response;
+        return processImageTriggers(response, triggers);
     }
 
     // calculateCost removed (moved to PricingService)
 
     private static async logMessage(sessionId: string, role: ChatRole, content: string, tin = 0, tout = 0, cost = 0, images: UserImageAttachment[] = []) {
         const storedImages = await this.toStoredImageAttachments(images);
-        return await prisma.message.create({
-            data: {
-                session_id: sessionId,
-                role,
-                content: content,
-                tokens_in: tin,
-                tokens_out: tout,
-                cost_usd: cost,
-                images: storedImages as unknown as Prisma.InputJsonValue,
-            },
-        });
+        const operation = currentSessionOperation(sessionId);
+        if (!operation || operation.initiallyEnded) throw new SessionOperationError('No se puede escribir fuera de un turno activo.');
+        const data = {
+            id: randomUUID(), session_id: sessionId, role, content,
+            tokens_in: tin, tokens_out: tout, cost_usd: cost,
+            images: storedImages as unknown as Prisma.InputJsonValue,
+            created_at: new Date(),
+        };
+        operation.writes.push((tx) => tx.message.create({ data }));
+        return data;
     }
 
-    private static async toStoredImageAttachments(images: UserImageAttachment[]): Promise<StoredImageAttachment[]> {
-        const mode = (process.env.CHAT_IMAGE_STORAGE_MODE || 'thumbnail').toLowerCase();
-        if (mode === 'none') return [];
-        if (!Array.isArray(images) || images.length === 0) return [];
-
-        const storageMode = mode === 'full'
-            ? 'full'
-            : mode === 'metadata'
-                ? 'metadata'
-                : 'thumbnail';
-
-        const stored: StoredImageAttachment[] = [];
-        for (const image of images) {
-            if (!image || typeof image.data_url !== 'string' || typeof image.mime_type !== 'string') {
-                continue;
-            }
-            const commaIndex = image.data_url.indexOf(',');
-            const base64Payload = commaIndex >= 0 ? image.data_url.slice(commaIndex + 1) : '';
-            if (!base64Payload) continue;
-
-            let bytes: Buffer;
-            try {
-                bytes = Buffer.from(base64Payload, 'base64');
-            } catch {
-                continue;
-            }
-
-            const checksum = createHash('sha256').update(bytes).digest('hex');
-            if (storageMode === 'full') {
-                stored.push({
-                    mime_type: image.mime_type,
-                    byte_size: bytes.length,
-                    sha256: checksum,
-                    data_url: image.data_url,
-                    storage_mode: 'full',
-                });
-                continue;
-            }
-
-            if (storageMode === 'thumbnail') {
-                const thumbnail = await this.buildTinyThumbnailDataUrl(bytes);
-                if (thumbnail) {
-                    stored.push({
-                        mime_type: 'image/webp',
-                        byte_size: thumbnail.byteSize,
-                        sha256: checksum,
-                        data_url: thumbnail.dataUrl,
-                        original_mime_type: image.mime_type,
-                        original_byte_size: bytes.length,
-                        storage_mode: 'thumbnail',
-                    });
-                    continue;
-                }
-            }
-
-            stored.push({
-                mime_type: image.mime_type,
-                byte_size: bytes.length,
-                sha256: checksum,
-                storage_mode: 'metadata',
-            });
-        }
-
-        return stored;
+    private static async toStoredImageAttachments(images: UserImageAttachment[]) {
+        return toStoredImageAttachments(images);
     }
 
     private static noEvidenceReply(purpose: string): string {
@@ -1764,59 +1247,15 @@ export class Director {
     }
 
     private static async appendRagTrace(sessionId: string, trace: RagTrace) {
-        await mutateSessionMetadata({
-            sessionId,
-            mutate: (metadata) => {
-                const traces = Array.isArray(metadata.rag_traces) ? metadata.rag_traces : [];
-
-                traces.push({
-                    timestamp: new Date().toISOString(),
-                    ...trace,
-                });
-
-                metadata.rag_traces = traces.slice(-200);
-                return { metadata };
-            },
-        });
+        await appendRagTrace(sessionId, trace);
     }
 
     private static async appendTriggerTraces(sessionId: string, traces: unknown[]) {
-        if (!Array.isArray(traces) || traces.length === 0) return;
-
-        await mutateSessionMetadata({
-            sessionId,
-            mutate: (metadata) => {
-                const existing = Array.isArray(metadata.trigger_traces) ? metadata.trigger_traces : [];
-
-                const timestamp = new Date().toISOString();
-                const next = traces.map((trace) => ({
-                    timestamp,
-                    ...(trace && typeof trace === 'object' && !Array.isArray(trace)
-                        ? trace as Record<string, unknown>
-                        : { value: String(trace) }),
-                }));
-
-                metadata.trigger_traces = [...existing, ...next].slice(-400);
-                return { metadata };
-            },
-        });
+        await appendTriggerTraces(sessionId, traces);
     }
 
     private static async appendLlmPromptTrace(sessionId: string, trace: Record<string, unknown>) {
-        await mutateSessionMetadata({
-            sessionId,
-            mutate: (metadata) => {
-                const existing = Array.isArray(metadata.llm_prompt_traces) ? metadata.llm_prompt_traces : [];
-
-                existing.push({
-                    timestamp: new Date().toISOString(),
-                    ...trace,
-                });
-
-                metadata.llm_prompt_traces = existing.slice(-300);
-                return { metadata };
-            },
-        });
+        await appendLlmPromptTrace(sessionId, trace);
     }
 
     private static async runFlowLlmStep(params: {
@@ -2367,13 +1806,9 @@ export class Director {
             phraseModelFallback
         } = params;
 
-        const session = await prisma.session.findUnique({
-            where: { id: sessionId },
-            select: { metadata: true, ended: true },
-        });
+        const session = await readRuntimeSession(sessionId);
 
         if (session?.ended) {
-            await this.logMessage(sessionId, 'user', userLogContent);
             return {
                 content: this.SESSION_ALREADY_ENDED_REPLY,
                 bypass: true,
@@ -2492,7 +1927,6 @@ export class Director {
                     ended: true,
                     patch: metadata,
                 });
-                await this.logMessage(sessionId, 'user', userLogContent);
                 return {
                     content: this.SESSION_ALREADY_ENDED_REPLY,
                     bypass: true,
@@ -3155,10 +2589,7 @@ UNKNOWN es si no es clara la intención de avanzar o parar.`
         let runtimeConfig: BotConfig = config;
         if (shouldRunForMode && rag.vector_store_ids.length > 0) {
             try {
-                const detectorSession = await prisma.session.findUnique({
-                    where: { id: sessionId },
-                    select: { metadata: true },
-                });
+                const detectorSession = await readRuntimeSession(sessionId);
                 const metadata = (detectorSession?.metadata && typeof detectorSession.metadata === 'object' && !Array.isArray(detectorSession.metadata))
                     ? detectorSession.metadata as Record<string, unknown>
                     : {};
@@ -3271,7 +2702,7 @@ UNKNOWN es si no es clara la intención de avanzar o parar.`
             },
             {
                 readSession: async (targetSessionId) => {
-                    return prisma.session.findUnique({ where: { id: targetSessionId } });
+                    return readRuntimeSession(targetSessionId);
                 },
                 writeSession: async ({ sessionId: targetSessionId, ended, metadata }) => {
                     await this.updateSessionMetadataPreservingAudit({

@@ -7,18 +7,19 @@ import { runEvaluation } from '@/app/actions/evaluation';
 import { logout } from '@/app/actions/auth';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, User, Calendar, DollarSign, FileSignature, RefreshCcw, Download } from 'lucide-react';
+import { ArrowLeft, User, Calendar, FileSignature, RefreshCcw, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useParams, usePathname } from 'next/navigation';
 import { EvaluationReport } from '@/components/admin/evaluation-report';
 import Image from 'next/image';
 import { toast } from 'sonner';
-import { ThemeToggle } from '@/components/providers/theme-toggle';
 import { LanguageSwitcher } from '@/components/providers/language-switcher';
 import { isEvaluationResult, type ViewerEvaluationResult } from '@/lib/evaluation-result';
 import { getConversationUserDisplay } from '@/lib/conversation-user-display';
+import { WorkspacePageHeader } from '@/components/workspace/workspace-page-header';
+import { WorkspacePanel } from '@/components/workspace/workspace-panel';
+import { ConversationAdminAuditPanels } from '@/components/conversations/conversation-admin-audit-panels';
 
 type ConversationDetail = NonNullable<Awaited<ReturnType<typeof getConversationDetail>>>;
 
@@ -338,11 +339,11 @@ export default function ConversationDetailPage() {
     };
 
     if (isLoading) {
-        return <div className="text-slate-400 font-bold animate-pulse uppercase tracking-widest text-xs p-20">{t.loading}</div>;
+        return <div className="workspace-empty-state animate-pulse">{t.loading}</div>;
     }
 
     if (!session) {
-        return <div className="text-slate-400 font-bold p-20">{t.conv_empty}</div>;
+        return <div className="workspace-empty-state">{t.conv_empty}</div>;
     }
 
     const stats = session.stats;
@@ -426,361 +427,112 @@ export default function ConversationDetailPage() {
 
     return (
         <div className="space-y-6 animate-in fade-in duration-700">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div className="flex items-center gap-4">
-                    <Link href={conversationsBasePath}>
-                        <Button variant="ghost" size="sm" className="hover:bg-slate-100 group text-slate-600">
-                            <ArrowLeft className="mr-2 h-4 w-4 group-hover:-translate-x-1 transition-transform" />
-                            {t.conv_back}
-                        </Button>
-                    </Link>
-                    <div className="w-px h-6 bg-slate-200" />
-                    <div className="flex items-center gap-2">
-                        <span className="font-black text-xl text-slate-900">{t.conv_session}</span>
-                        <Badge variant="outline" className="font-mono text-[10px] text-slate-400">
+            <WorkspacePageHeader
+                variant="detail"
+                eyebrow={lang === 'es' ? 'Detalle de sesión' : 'Session detail'}
+                title={(
+                    <div className="flex flex-wrap items-center gap-3">
+                        <span>{t.conv_session}</span>
+                        <Badge variant="outline" className="workspace-chip font-mono">
                             {session.id.slice(0, 8)}
                         </Badge>
                     </div>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-end gap-2 md:gap-4 text-sm">
-                    <span className="flex items-center gap-1.5 text-slate-500">
-                        <User className="w-4 h-4" />
-                        <span className="flex flex-col leading-tight">
-                            <span>{userDisplay.primary}</span>
-                            {userDisplay.secondary && (
-                                <span className="text-[11px] text-slate-400">{userDisplay.secondary}</span>
-                            )}
-                        </span>
-                    </span>
-                    <span className="text-slate-300">|</span>
-                    <span className="flex items-center gap-1.5 text-primary font-bold">
-                        <Image src="/icons/assistant.svg" alt="Bot" width={16} height={16} className="h-4 w-4 object-contain" />
-                        {session.bot?.name || (lang === 'es' ? 'Desconocido' : 'Unknown')}
-                    </span>
-                    <span className="text-slate-300">|</span>
-                    {canEvaluate && (
-                        <Button
-                            size="sm"
-                            variant={evaluationResult ? 'outline' : 'default'}
-                            onClick={handleEvaluateConversation}
-                            disabled={isEvaluating}
-                            className="h-8 text-xs font-bold"
-                        >
-                            {isEvaluating
-                                ? <RefreshCcw className="mr-2 h-3.5 w-3.5 animate-spin" />
-                                : <FileSignature className="mr-2 h-3.5 w-3.5" />}
-                            {isAdminViewer && evaluationResult
-                                ? (lang === 'es' ? 'Reevaluar' : 'Re-evaluate')
-                                : (lang === 'es' ? 'Evaluar' : 'Evaluate')}
-                        </Button>
-                    )}
-                    {evaluationResult && (
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={handleDownloadEvaluationPdf}
-                            disabled={isDownloadingPdf}
-                            className="h-8 text-xs font-bold"
-                        >
-                            <Download className={cn("mr-2 h-3.5 w-3.5", isDownloadingPdf && "animate-pulse")} />
-                            {lang === 'es' ? 'Descargar PDF' : 'Download PDF'}
-                        </Button>
-                    )}
-                    {isStandaloneConversations && (
-                        <>
-                            <Link href="/">
-                                <Button variant="outline" size="sm" className="h-8 text-xs font-bold glass border-white/10 hover:bg-primary/10">
-                                    {lang === 'es' ? 'Selector' : 'Simulators'}
-                                </Button>
-                            </Link>
-                            <form action={logout}>
-                                <Button variant="ghost" size="sm" type="submit" className="h-8 text-xs font-bold text-slate-500 hover:text-red-600 hover:bg-red-50">
-                                    {lang === 'es' ? 'Cerrar sesión' : 'Log out'}
-                                </Button>
-                            </form>
-                            <LanguageSwitcher />
-                            <ThemeToggle className="h-8 w-8 rounded-full shadow-sm" />
-                        </>
-                    )}
-                </div>
-            </div>
-
-            <div className={cn("grid grid-cols-1 gap-6", showAuditPanels && "md:grid-cols-4")}>
-                {/* Stats Sidebar */}
-                {showAuditPanels && (
-                    <div className="md:col-span-1 space-y-4">
-                        <h3 className="font-black text-sm text-slate-700 flex items-center gap-2 uppercase tracking-widest">
-                            <DollarSign className="w-4 h-4 text-green-500" />
-                            {t.conv_usage}
-                        </h3>
-
-                        <Card className="bg-white shadow-sm border-slate-200 rounded-2xl">
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-xs font-bold text-slate-400 uppercase tracking-widest">{t.conv_total_cost}</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-black text-green-500">
-                                    ${totalCost.toFixed(6)}
-                                </div>
-                                <p className="text-xs text-slate-400 mt-1">
-                                    {lang === 'es'
-                                        ? 'Chat + TTS + evaluación'
-                                        : 'Chat + TTS + evaluation'}
-                                </p>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="bg-white shadow-sm border-slate-200 rounded-2xl">
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                                    {lang === 'es' ? 'Costo por modelo (Admin)' : 'Cost by model (Admin)'}
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-4 text-xs">
-                                <div className="space-y-2">
-                                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                                        {lang === 'es' ? 'Conversación' : 'Conversation'}
-                                    </p>
-                                    {chatRows.map((row) => (
-                                        <div key={`chat-${row.model}`} className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-2">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <span className="font-mono text-slate-700">{row.model}</span>
-                                                <span className="font-mono text-slate-900">${row.cost_usd.toFixed(6)}</span>
-                                            </div>
-                                            <p className="text-[10px] text-slate-500 mt-0.5">
-                                                {lang === 'es'
-                                                    ? `in: ${row.tokens_in.toLocaleString()} · out: ${row.tokens_out.toLocaleString()}`
-                                                    : `in: ${row.tokens_in.toLocaleString()} · out: ${row.tokens_out.toLocaleString()}`}
-                                            </p>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                <div className="space-y-2">
-                                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">TTS</p>
-                                    {ttsRows.length > 0 ? ttsRows.map((row) => (
-                                        <div key={`tts-${row.model}`} className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-2">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <span className="font-mono text-slate-700">{row.model}</span>
-                                                <span className="font-mono text-slate-900">${row.cost_usd.toFixed(6)}</span>
-                                            </div>
-                                            <p className="text-[10px] text-slate-500 mt-0.5">
-                                                {lang === 'es'
-                                                    ? `tokens est.: ${row.estimated_tokens.toLocaleString()} · eventos: ${row.events}`
-                                                    : `est. tokens: ${row.estimated_tokens.toLocaleString()} · events: ${row.events}`}
-                                            </p>
-                                        </div>
-                                    )) : (
-                                        <p className="text-[11px] text-slate-400">{lang === 'es' ? 'Sin uso de TTS' : 'No TTS usage'}</p>
-                                    )}
-                                </div>
-
-                                <div className="space-y-2">
-                                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                                        {lang === 'es' ? 'Evaluación' : 'Evaluation'}
-                                    </p>
-                                    {evaluationRows.length > 0 ? (
-                                        evaluationRows.map((row) => (
-                                            <div key={`eval-${row.model}-${row.provider}`} className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-2">
-                                                <div className="flex items-center justify-between gap-2">
-                                                    <span className="font-mono text-slate-700">{row.model}</span>
-                                                    <span className="font-mono text-slate-900">${row.cost_usd.toFixed(6)}</span>
-                                                </div>
-                                                <p className="text-[10px] text-slate-500 mt-0.5">
-                                                    {lang === 'es'
-                                                        ? `in: ${row.tokens_in.toLocaleString()} · out: ${row.tokens_out.toLocaleString()} · corridas: ${row.runs}`
-                                                        : `in: ${row.tokens_in.toLocaleString()} · out: ${row.tokens_out.toLocaleString()} · runs: ${row.runs}`}
-                                                </p>
-                                            </div>
-                                        ))
-                                    ) : (
-                                        <p className="text-[11px] text-slate-400">{lang === 'es' ? 'Sin auditoría de evaluación' : 'No evaluation audit yet'}</p>
-                                    )}
-                                </div>
-
-                                <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
-                                    <span className="font-bold text-slate-700 uppercase tracking-wider text-[10px]">
-                                        {lang === 'es' ? 'Total interacción' : 'Interaction total'}
-                                    </span>
-                                    <span className="font-mono font-black text-green-600">${totalCost.toFixed(6)}</span>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <div className="grid grid-cols-2 gap-3">
-                            <Card className="bg-white shadow-sm border-slate-200 rounded-xl">
-                                <CardHeader className="pb-1 px-3 pt-3">
-                                    <CardTitle className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t.conv_tokens_in}</CardTitle>
-                                </CardHeader>
-                                <CardContent className="px-3 pb-3">
-                                    <div className="text-lg font-mono font-black text-slate-900">
-                                        {stats.tokensIn.toLocaleString()}
-                                    </div>
-                                </CardContent>
-                            </Card>
-                            <Card className="bg-white shadow-sm border-slate-200 rounded-xl">
-                                <CardHeader className="pb-1 px-3 pt-3">
-                                    <CardTitle className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t.conv_tokens_out}</CardTitle>
-                                </CardHeader>
-                                <CardContent className="px-3 pb-3">
-                                    <div className="text-lg font-mono font-black text-slate-900">
-                                        {stats.tokensOut.toLocaleString()}
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </div>
-
-                        <Card className="bg-white shadow-sm border-slate-200 rounded-2xl">
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-xs font-bold text-slate-400 uppercase tracking-widest">{t.conv_session_info}</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-3 text-sm">
-                                <div className="flex justify-between">
-                                    <span className="text-slate-400">{t.conv_messages}</span>
-                                    <span className="font-mono font-bold text-slate-900">{stats.count}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-slate-400">{t.conv_started}</span>
-                                    <span className="font-mono text-right text-slate-700 text-xs">
-                                        {formatDateTime(session.created_at)}
-                                    </span>
-                                </div>
-                                {isAdminViewer && session.voice_stats && (
-                                    <div className="pt-3 border-t border-slate-100 space-y-1">
-                                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                                            {lang === 'es' ? 'Auditoría Voz (Admin)' : 'Voice Audit (Admin)'}
-                                        </p>
-                                        <div className="flex justify-between text-xs">
-                                            <span className="text-slate-400">{lang === 'es' ? 'Eventos' : 'Events'}</span>
-                                            <span className="font-mono">{session.voice_stats.events}</span>
-                                        </div>
-                                        <div className="flex justify-between text-xs">
-                                            <span className="text-slate-400">{lang === 'es' ? 'Chars' : 'Chars'}</span>
-                                            <span className="font-mono">{session.voice_stats.total_chars.toLocaleString()}</span>
-                                        </div>
-                                        <div className="flex justify-between text-xs">
-                                            <span className="text-slate-400">{lang === 'es' ? 'Tokens est.' : 'Est. Tokens'}</span>
-                                            <span className="font-mono">{session.voice_stats.total_estimated_tokens.toLocaleString()}</span>
-                                        </div>
-                                        <div className="flex justify-between text-xs">
-                                            <span className="text-slate-400">{lang === 'es' ? 'Costo voz' : 'Voice cost'}</span>
-                                            <span className="font-mono">${session.voice_stats.total_cost_usd.toFixed(6)}</span>
-                                        </div>
-                                    </div>
-                                )}
-                                {isAdminViewer && session.metadata && (
-                                    <div className="pt-3 border-t border-slate-100">
-                                        <details className="text-xs text-slate-400">
-                                            <summary className="cursor-pointer hover:text-slate-700">{t.conv_raw_meta}</summary>
-                                            <pre className="mt-2 p-2 bg-slate-50 rounded overflow-x-auto text-slate-600">
-                                                {JSON.stringify(session.metadata, null, 2)}
-                                            </pre>
-                                        </details>
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        {isAdminViewer && ragTraces.length > 0 && (
-                            <Card className="bg-white shadow-sm border-slate-200 rounded-2xl">
-                                <CardHeader className="pb-2">
-                                    <CardTitle className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                                        {lang === 'es' ? 'Traza RAG (Admin)' : 'RAG Trace (Admin)'}
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-2 max-h-[360px] overflow-y-auto">
-                                    {ragTraces.slice().reverse().map((trace, idx: number) => (
-                                        <div key={`${trace.timestamp || 'ts'}-${idx}`} className="p-2 rounded-lg border border-slate-100 bg-slate-50">
-                                            <div className="flex items-center justify-between mb-1">
-                                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                                                    {(trace.rag_owner || 'wrapper')} · {trace.rag_mode} · {trace.purpose}
-                                                </span>
-                                                <span className="text-[10px] font-mono text-slate-400">{trace.evidence_count || 0} ev</span>
-                                            </div>
-                                            <p className="text-[11px] text-slate-600 font-mono truncate" title={trace.query}>{trace.query}</p>
-                                            <p className="text-[10px] text-slate-400 mt-1">
-                                                strategy={trace.strategy} top_k={trace.top_k} fallback={trace.fallback_applied || 'none'} latency={trace.latency_ms || 0}ms
-                                            </p>
-                                            {Array.isArray(trace.top_results) && trace.top_results.length > 0 && (
-                                                <div className="mt-2 space-y-1">
-                                                    {trace.top_results.slice(0, 2).map((r, i: number) => (
-                                                        <div key={`${r.file_id}-${i}`} className="rounded border border-slate-200 bg-white p-1.5">
-                                                            <p className="text-[10px] font-mono text-slate-600 truncate">
-                                                                {r.filename || r.file_id} · {typeof r.score === 'number' ? r.score.toFixed(3) : '0.000'}
-                                                            </p>
-                                                            {r.excerpt && (
-                                                                <p className="text-[10px] text-slate-500 line-clamp-2">{r.excerpt}</p>
-                                                            )}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {isAdminViewer && triggerTraces.length > 0 && (
-                            <Card className="bg-white shadow-sm border-slate-200 rounded-2xl">
-                                <CardHeader className="pb-2">
-                                    <CardTitle className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                                        {lang === 'es' ? 'Traza Triggers (Admin)' : 'Trigger Trace (Admin)'}
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-2 max-h-[360px] overflow-y-auto">
-                                    {triggerTraces.slice().reverse().map((trace, idx: number) => (
-                                        <div key={`${trace.timestamp || 'ts'}-${trace.step_id || 'step'}-${idx}`} className="p-2 rounded-lg border border-slate-100 bg-slate-50">
-                                            <div className="flex items-center justify-between mb-1">
-                                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                                                    {trace.step_id || 'step'} · {trace.trigger_type || 'trigger'} · {trace.layer || 'none'}
-                                                </span>
-                                                <span className={cn(
-                                                    "text-[10px] font-mono",
-                                                    trace.matched ? "text-green-600" : "text-slate-400"
-                                                )}>
-                                                    {trace.matched ? 'match' : 'no-match'}
-                                                </span>
-                                            </div>
-                                            <p className="text-[10px] text-slate-500">
-                                                {trace.reason || 'ok'}
-                                            </p>
-                                            {(typeof trace.score === 'number' || typeof trace.distance === 'number') && (
-                                                <p className="text-[10px] text-slate-400 mt-1">
-                                                    score={typeof trace.score === 'number' ? trace.score.toFixed(3) : '-'} · dist={typeof trace.distance === 'number' ? trace.distance : '-'} / {typeof trace.max_distance === 'number' ? trace.max_distance : '-'}
-                                                </p>
-                                            )}
-                                            {Array.isArray(trace.guardrails_applied) && trace.guardrails_applied.length > 0 && (
-                                                <p className="text-[10px] text-amber-600 mt-1">
-                                                    guardrails: {trace.guardrails_applied.join(', ')}
-                                                </p>
-                                            )}
-                                            {trace.model_used && (
-                                                <p className="text-[10px] text-blue-600 mt-1">
-                                                    model_fallback: confidence={typeof trace.model_confidence === 'number' ? trace.model_confidence.toFixed(2) : '0.00'}
-                                                </p>
-                                            )}
-                                        </div>
-                                    ))}
-                                </CardContent>
-                            </Card>
-                        )}
-                    </div>
                 )}
+                description={lang === 'es'
+                    ? 'Transcript, evaluación y auditoría administrativa en una sola vista.'
+                    : 'Transcript, evaluation, and admin audit in a single view.'}
+                meta={(
+                    <>
+                        <span className="workspace-chip">
+                            <User className="h-3.5 w-3.5" />
+                            {userDisplay.primary}
+                        </span>
+                        {userDisplay.secondary ? (
+                            <span className="workspace-chip workspace-chip-muted">
+                                {userDisplay.secondary}
+                            </span>
+                        ) : null}
+                        <span className="workspace-chip workspace-chip-primary">
+                            <Image src="/icons/assistant.svg" alt="Bot" width={14} height={14} className="h-3.5 w-3.5 object-contain" />
+                            {session.bot?.name || (lang === 'es' ? 'Desconocido' : 'Unknown')}
+                        </span>
+                        <span className="workspace-chip workspace-chip-muted">
+                            <Calendar className="h-3.5 w-3.5" />
+                            {formatDate(session.created_at)}
+                        </span>
+                    </>
+                )}
+                actions={(
+                    <>
+                        <Link href={conversationsBasePath}>
+                            <Button variant="outline" className="h-11 rounded-2xl border-slate-200 bg-white px-4 font-semibold">
+                                <ArrowLeft className="mr-2 h-4 w-4" />
+                                {t.conv_back}
+                            </Button>
+                        </Link>
+                        {canEvaluate && (
+                            <Button
+                                variant={evaluationResult ? 'outline' : 'default'}
+                                onClick={handleEvaluateConversation}
+                                disabled={isEvaluating}
+                                className="h-11 rounded-2xl px-4 text-sm font-semibold"
+                            >
+                                {isEvaluating
+                                    ? <RefreshCcw className="mr-2 h-3.5 w-3.5 animate-spin" />
+                                    : <FileSignature className="mr-2 h-3.5 w-3.5" />}
+                                {isAdminViewer && evaluationResult
+                                    ? (lang === 'es' ? 'Reevaluar' : 'Re-evaluate')
+                                    : (lang === 'es' ? 'Evaluar' : 'Evaluate')}
+                            </Button>
+                        )}
+                        {evaluationResult && (
+                            <Button
+                                variant="outline"
+                                onClick={handleDownloadEvaluationPdf}
+                                disabled={isDownloadingPdf}
+                                className="h-11 rounded-2xl border-slate-200 bg-white px-4 text-sm font-semibold"
+                            >
+                                <Download className={cn("mr-2 h-3.5 w-3.5", isDownloadingPdf && "animate-pulse")} />
+                                {lang === 'es' ? 'Descargar PDF' : 'Download PDF'}
+                            </Button>
+                        )}
+                        {isStandaloneConversations ? (
+                            <>
+                                <Link href="/">
+                                    <Button variant="outline" className="h-11 rounded-2xl border-slate-200 bg-white px-4 font-semibold">
+                                        {lang === 'es' ? 'Selector' : 'Simulators'}
+                                    </Button>
+                                </Link>
+                                <form action={logout}>
+                                    <Button variant="ghost" type="submit" className="h-11 rounded-2xl px-4 font-semibold text-slate-600 hover:bg-red-50 hover:text-red-600">
+                                        {lang === 'es' ? 'Cerrar sesión' : 'Log out'}
+                                    </Button>
+                                </form>
+                                <LanguageSwitcher />
+                            </>
+                        ) : null}
+                    </>
+                )}
+            />
 
-                {/* Chat History */}
-                <div className={cn("space-y-6", showAuditPanels && "md:col-span-3")}>
-                    {/* Evaluation Report - NEW */}
+            <div className={cn("grid grid-cols-1 gap-6", showAuditPanels && "xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]")}>
+                <div className="space-y-6">
                     {evaluationResult && (
                         <EvaluationReport result={evaluationResult} showDebugLog={isAdminViewer} sessionId={session.id} />
                     )}
 
-                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 md:p-8 overflow-y-auto max-h-[70vh]">
+                    <WorkspacePanel
+                        variant="transcript"
+                        title={lang === 'es' ? 'Transcript' : 'Transcript'}
+                        description={lang === 'es'
+                            ? 'Secuencia completa de la sesión con sus adjuntos.'
+                            : 'Full session sequence with its attachments.'}
+                        className="overflow-hidden"
+                        bodyClassName="max-h-[70vh] overflow-y-auto p-6 md:p-8"
+                    >
                         <div className="max-w-3xl mx-auto space-y-6">
                             <div className="flex items-center justify-center mb-8">
-                                <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 px-4 py-1">
+                                <Badge variant="outline" className="workspace-chip workspace-chip-primary px-4 py-1">
                                     <Calendar className="w-3 h-3 mr-2" />
                                     {t.conv_started_on} {formatDate(session.created_at)}
                                 </Badge>
@@ -855,8 +607,29 @@ export default function ConversationDetailPage() {
                                 );
                             })}
                         </div>
-                    </div>
+                    </WorkspacePanel>
                 </div>
+
+                {showAuditPanels ? (
+                    <ConversationAdminAuditPanels
+                        lang={lang}
+                        sessionId={session.id}
+                        createdAt={session.created_at}
+                        botName={session.bot?.name || (lang === 'es' ? 'Desconocido' : 'Unknown')}
+                        userPrimary={userDisplay.primary}
+                        userSecondary={userDisplay.secondary}
+                        stats={{ count: stats.count }}
+                        totalCost={totalCost}
+                        chatRows={chatRows}
+                        ttsRows={ttsRows}
+                        evaluationRows={evaluationRows}
+                        metadata={metadata}
+                        ragTraces={ragTraces}
+                        triggerTraces={triggerTraces}
+                        voiceStats={session.voice_stats}
+                        formatDateTime={formatDateTime}
+                    />
+                ) : null}
             </div>
         </div>
     );

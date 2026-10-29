@@ -1,3 +1,4 @@
+import { getRuntimeBot } from '@/lib/runtime-bot';
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getSessionActor } from '@/lib/auth-utils';
@@ -129,14 +130,7 @@ export async function POST(req: NextRequest) {
         await assertCanUseSessionForLiveChat({ sessionId, botId, user: actor });
 
         const [bot, ttsConfig] = await Promise.all([
-            prisma.bot.findFirst({
-                where: { id: botId, deleted_at: null },
-                select: {
-                    api_key: true,
-                    bot_type: true,
-                    config: true,
-                },
-            }),
+            getRuntimeBot(botId, sessionId),
             prisma.ttsConfig.findFirst(),
         ]);
 

@@ -6,6 +6,7 @@ const LEGACY_ID_REGEX =
     /^[A-Za-z0-9][A-Za-z0-9_-]{7,63}$/;
 
 const RESERVED_METADATA_KEYS = new Set([
+    '__proto__', 'constructor', 'prototype',
     'session_id',
     'bot_id',
     'organization_id',
@@ -22,6 +23,17 @@ const RESERVED_METADATA_KEYS = new Set([
     'llm_prompt_traces',
     'runtime_block',
     'flow_state',
+    'evaluation',
+    'evaluation_history',
+    'session_vars',
+    'examiner_state',
+    'detector_state',
+    'runtime_snapshot',
+    'qa_lab',
+    'initialized',
+    'initialization_result',
+    '_operation',
+    '_requests',
     'lti_launch',
     'lti_outcome_sync',
 ]);
@@ -74,19 +86,36 @@ export function isContentLengthOverLimit(
     return contentLength > normalizedMax;
 }
 
-export async function parseJsonBodyWithLimit(
+export async function readBodyWithLimit(
     req: Request,
     maxBytes: number
-): Promise<Record<string, unknown>> {
+): Promise<Buffer> {
     const normalizedMax = Number.isFinite(maxBytes) && maxBytes > 0
         ? Math.floor(maxBytes)
         : 1;
 
-    const rawBody = await req.text();
-    const bodyBytes = new TextEncoder().encode(rawBody).length;
-    if (bodyBytes > normalizedMax) {
-        throw new PayloadTooLargeError(`Request body too large. Max ${normalizedMax} bytes.`);
+    const reader = req.body?.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    if (reader) {
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                size += value.byteLength;
+                if (size > normalizedMax) {
+                    await reader.cancel();
+                    throw new PayloadTooLargeError(`Request body too large. Max ${normalizedMax} bytes.`);
+                }
+                chunks.push(value);
+            }
+        } finally { reader.releaseLock(); }
     }
+    return Buffer.concat(chunks);
+}
+
+export async function parseJsonBodyWithLimit(req: Request, maxBytes: number): Promise<Record<string, unknown>> {
+    const rawBody = (await readBodyWithLimit(req, maxBytes)).toString('utf8');
 
     if (!rawBody.trim()) return {};
 

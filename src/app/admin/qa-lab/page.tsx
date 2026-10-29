@@ -8,9 +8,5 @@ export default async function QaLabPage() {
         redirect('/admin');
     }
 
-    return (
-        <div className="container mx-auto py-10 px-6 max-w-7xl">
-            <QaLabPanel />
-        </div>
-    );
+    return <QaLabPanel />;
 }

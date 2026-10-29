@@ -54,12 +54,17 @@ export function AdminSidebar({ role, hasOrgAdminAccess }: AdminSidebarProps) {
     };
 
     return (
-        <aside className="md:sticky md:top-16 md:h-[calc(100vh-4.5rem)] md:overflow-y-auto">
-            <nav className="rounded-xl border border-slate-200 bg-white shadow-sm p-2">
-                <p className="px-2 pb-1 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                    {lang === 'es' ? 'Navegacion' : 'Navigation'}
-                </p>
-                <div className="flex md:flex-col gap-1.5 overflow-x-auto md:overflow-visible pb-1 md:pb-0">
+        <aside className="admin-rail px-4 py-4 md:px-0 md:py-0">
+            <nav className="admin-rail-surface">
+                <div className="admin-rail-header">
+                    <p className="admin-rail-title">
+                        {lang === 'es' ? 'Navegación' : 'Navigation'}
+                    </p>
+                    <p className="admin-rail-caption">
+                        {lang === 'es' ? 'Accesos del panel' : 'Workspace sections'}
+                    </p>
+                </div>
+                <div className="admin-rail-nav">
                     {items.map((item) => {
                         const Icon = item.icon;
                         const active = isActive(item.href);
@@ -67,13 +72,13 @@ export function AdminSidebar({ role, hasOrgAdminAccess }: AdminSidebarProps) {
                             <Link key={item.href} href={item.href} prefetch={false} className="shrink-0">
                                 <span
                                     className={cn(
-                                        "inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-bold transition-colors",
+                                        'admin-rail-link',
                                         active
-                                            ? "bg-primary/10 text-primary border border-primary/25"
-                                            : "text-slate-600 hover:bg-slate-50 border border-transparent hover:border-slate-200"
+                                            ? 'admin-rail-link-active'
+                                            : 'admin-rail-link-idle'
                                     )}
                                 >
-                                    <Icon className={cn("h-4 w-4", active ? "text-primary" : "text-slate-400")} />
+                                    <Icon className={cn('h-4 w-4', active ? 'text-primary' : 'text-slate-400')} />
                                     {item.label}
                                 </span>
                             </Link>

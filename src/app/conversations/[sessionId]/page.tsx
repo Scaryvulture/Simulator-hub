@@ -15,10 +15,14 @@ export default async function ProtectedConversationDetailPage({ params }: Props)
     const { sessionId } = await params;
 
     return (
-        <ConversationDetailLitePage
-            sessionId={sessionId}
-            backHref="/conversations"
-            showStandaloneActions
-        />
+        <div className="workspace-canvas">
+            <main className="workspace-shell py-8 sm:py-10">
+                <ConversationDetailLitePage
+                    sessionId={sessionId}
+                    backHref="/conversations"
+                    showStandaloneActions
+                />
+            </main>
+        </div>
     );
 }

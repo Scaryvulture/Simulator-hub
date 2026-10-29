@@ -10,86 +10,10 @@ import { cn, parseCSV } from '@/lib/utils';
 import { HelpTooltip } from '@/components/admin/help-tooltip';
 import { lintFlowConfig, type FlowLintIssue } from '@/lib/flow-linter';
 import type { BotConfig } from '@/lib/schemas/bot-config';
+import { FlowEditorSessionVarRow } from './flow-editor-session-var-row';
+import type { FlowAction, FlowRagAction, FlowStep, FlowTrigger, SessionVarConfig } from './flow-editor-types';
 
-// Types matching flow-engine.ts
-export interface FlowTrigger {
-    type: 'START' | 'REGEX' | 'AFTER_STEP' | 'CONDITION' | 'DEFAULT' | 'PHRASE_LIST';
-    priority?: number;
-    pattern?: string;
-    flags?: string;
-    step_id?: string;
-    condition?: {
-        var: string;
-        op: 'contains' | 'not_contains' | 'equals' | 'not_equals' | 'ends_with' | 'not_ends_with' | 'gt' | 'lt';
-        value: string | number;
-    };
-    phrase_list?: {
-        phrases?: string[];
-        negative_phrases?: string[];
-        scope?: {
-            mode?: 'full_message' | 'tail_only';
-            end_window_chars?: number;
-            end_window_tokens?: number;
-        };
-        exact_mode?: 'token_boundary' | 'suffix' | 'substring';
-        fuzzy?: {
-            enabled?: boolean;
-            min_similarity?: number;
-            max_edits_short?: number;
-            max_edits_medium?: number;
-            max_edits_long?: number;
-            gray_zone_min_similarity?: number;
-        };
-        guardrails?: {
-            block_on_question?: boolean;
-            block_on_continuation_words?: boolean;
-            continuation_words?: string[];
-            allow_only_in_flow_states?: string[];
-        };
-        model_fallback?: {
-            mode?: 'off' | 'ambiguous_only';
-            min_confidence?: number;
-        };
-        intent_name?: string;
-    };
-}
-
-export interface FlowAction {
-    type: 'SET_VAR' | 'END_SESSION' | 'INCREMENT';
-    var?: string;
-    value?: string | number | boolean | null;
-}
-
-export interface FlowRagAction {
-    enabled?: boolean;
-    purpose?: 'context' | 'validate_user_response' | 'evaluate_conversation';
-    strategy?: 'metadata_first' | 'similarity' | 'hybrid';
-    query_template?: string;
-    metadata_filters?: Record<string, string | number | boolean>;
-    strict?: boolean;
-    top_k?: number;
-}
-
-export interface FlowStep {
-    id: string;
-    priority?: number;
-    mode: 'SCRIPTED' | 'LLM';
-    message?: string;
-    llm_context?: string;
-    rag_action?: FlowRagAction;
-    triggers: FlowTrigger[];
-    next_step?: string;
-    actions?: FlowAction[];
-}
-
-export interface SessionVarConfig {
-    type: 'random' | 'random_by' | 'fixed' | 'computed';
-    options?: (string | number | boolean)[];
-    source_var?: string;
-    mapping?: Record<string, (string | number | boolean)[]>;
-    value?: string | number | boolean;
-    formula?: string;
-}
+export type { FlowAction, FlowRagAction, FlowStep, FlowTrigger, SessionVarConfig } from './flow-editor-types';
 
 interface Props {
     steps: FlowStep[];
@@ -104,250 +28,6 @@ interface Props {
     hideFlowSteps?: boolean;
 }
 
-// =============== SESSION VARIABLE ROW ===============
-
-
-// =============== MAPPING EDITOR (for random_by vars) ===============
-interface MappingEditorProps {
-    mapping: Record<string, (string | number | boolean)[]>;
-    onChange: (newMapping: Record<string, (string | number | boolean)[]>) => void;
-    sourceVarConfig?: SessionVarConfig;
-    lang: 'es' | 'en';
-}
-
-function MappingEditor({ mapping, onChange, sourceVarConfig, lang }: MappingEditorProps) {
-    const [newKey, setNewKey] = useState('');
-    const [newOptions, setNewOptions] = useState('');
-    const sourceOptions = sourceVarConfig?.type === 'random' ? sourceVarConfig.options : null;
-
-    const addMapping = () => {
-        if (!newKey) return;
-        const optionsList = parseCSV(newOptions);
-        onChange({ ...mapping, [newKey]: optionsList });
-        setNewKey('');
-        setNewOptions('');
-    };
-
-
-    const removeMapping = (key: string) => {
-        const newMapping = { ...mapping };
-        delete newMapping[key];
-        onChange(newMapping);
-    };
-
-    return (
-        <div className="mt-3 bg-white p-3 rounded-lg border border-slate-200">
-            <Label className="text-[10px] text-slate-400 uppercase mb-2 block">
-                {lang === 'es'
-                    ? 'Mapeo de valores (si fuente == X, opciones = Y)'
-                    : 'Value mapping (if source == X, options = Y)'}
-            </Label>
-
-            {/* List existing mappings */}
-            <div className="space-y-2 mb-3">
-                {Object.entries(mapping).map(([key, options]) => (
-                    <div key={key} className="flex items-start gap-2 text-xs bg-slate-50 p-2 rounded border border-slate-100">
-                        <span className="font-bold min-w-[80px] text-slate-700">{key}:</span>
-                        <span className="text-slate-500 flex-1">{options.join(', ')}</span>
-                        <button onClick={() => removeMapping(key)} className="text-red-400 hover:text-red-600">
-                            <Trash2 className="h-3 w-3" />
-                        </button>
-                    </div>
-                ))}
-            </div>
-
-            {/* Add new mapping */}
-            <div className="flex items-end gap-2">
-                <div className="w-1/3">
-                    <Label className="text-[9px] text-slate-400">{lang === 'es' ? 'Valor fuente' : 'Source value'}</Label>
-                    {sourceOptions ? (
-                        <select
-                            value={newKey}
-                            onChange={(e) => setNewKey(e.target.value)}
-                            className="w-full h-8 rounded border border-slate-200 text-xs px-2"
-                        >
-                            <option value="">{lang === 'es' ? 'Seleccionar...' : 'Select...'}</option>
-                            {sourceOptions.map(opt => (
-                                <option key={String(opt)} value={String(opt)}>{String(opt)}</option>
-                            ))}
-                        </select>
-                    ) : (
-                        <Input
-                            value={newKey}
-                            onChange={(e) => setNewKey(e.target.value)}
-                            className="h-8 text-xs"
-                            placeholder={lang === 'es' ? 'Valor fuente' : 'Source value'}
-                        />
-                    )}
-                </div>
-                <div className="flex-1">
-                    <Label className="text-[9px] text-slate-400">
-                        {lang === 'es'
-                            ? 'Opciones resultantes (coma separada; usa comillas para textos con comas)'
-                            : 'Result options (comma-separated; use quotes for text with commas)'}
-                    </Label>
-                    <Input
-                        value={newOptions}
-                        onChange={(e) => setNewOptions(e.target.value)}
-                        className="h-8 text-xs"
-                        placeholder={lang === 'es' ? '"Opción, con coma", Opción B...' : '"Option, with comma", Option B...'}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                                e.preventDefault();
-                                addMapping();
-                            }
-                        }}
-                    />
-                </div>
-                <Button onClick={addMapping} size="sm" className="h-8 w-8 p-0" variant="outline">
-                    <Plus className="h-4 w-4" />
-                </Button>
-            </div>
-        </div>
-    );
-}
-
-// =============== SESSION VARIABLE ROW ===============
-interface SessionVarRowProps {
-    varName: string;
-    config: SessionVarConfig;
-    allVars: Record<string, SessionVarConfig>;
-    onUpdate: (newName: string, newConfig: SessionVarConfig) => void;
-    onDelete: () => void;
-    lang: 'es' | 'en';
-}
-
-function SessionVarRow({ varName, config, allVars, onUpdate, onDelete, lang }: SessionVarRowProps) {
-    const [localName, setLocalName] = useState(varName);
-    const [localOptions, setLocalOptions] = useState((config.options || []).join(', '));
-    const [localValue, setLocalValue] = useState(String(config.value ?? ''));
-    const [localFormula, setLocalFormula] = useState(config.formula || '');
-    const [localSourceVar, setLocalSourceVar] = useState(config.source_var || '');
-
-    useEffect(() => {
-        setLocalName(varName);
-    }, [varName]);
-
-    useEffect(() => {
-        setLocalOptions((config.options || []).join(', '));
-        setLocalValue(String(config.value ?? ''));
-        setLocalFormula(config.formula || '');
-        setLocalSourceVar(config.source_var || '');
-    }, [config.options, config.value, config.formula, config.source_var]);
-
-    const handleOptionsBlur = () => {
-        const newOptions = parseCSV(localOptions);
-        onUpdate(varName, { ...config, options: newOptions });
-    };
-
-    // Calculate available source variables (exclude self)
-    const availableSourceVars = Object.keys(allVars).filter(v => v !== varName);
-
-    return (
-        <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-            <div className="flex items-start gap-3">
-                <div className="flex-1 grid grid-cols-3 gap-3">
-                    <div>
-                        <Label className="text-[10px] text-slate-400 uppercase">{lang === 'es' ? 'Nombre' : 'Name'}</Label>
-                        <Input
-                            value={localName}
-                            onChange={(e) => setLocalName(e.target.value)}
-                            onBlur={() => {
-                                if (localName !== varName) {
-                                    onUpdate(localName, config);
-                                }
-                            }}
-                            className="h-9 text-sm font-mono"
-                            placeholder={lang === 'es' ? 'nombre_variable' : 'variable_name'}
-                        />
-                    </div>
-                    <div>
-                        <Label className="text-[10px] text-slate-400 uppercase">{lang === 'es' ? 'Tipo' : 'Type'}</Label>
-                        <select
-                            value={config.type}
-                            onChange={(e) => onUpdate(varName, { ...config, type: e.target.value as SessionVarConfig['type'] })}
-                            className="w-full h-9 rounded-lg border border-slate-200 text-sm px-2"
-                        >
-                            <option value="random">{lang === 'es' ? 'Aleatorio de lista' : 'Random from list'}</option>
-                            <option value="random_by">{lang === 'es' ? 'Según otra variable' : 'Based on another variable'}</option>
-                            <option value="fixed">{lang === 'es' ? 'Valor fijo' : 'Fixed value'}</option>
-                            <option value="computed">{lang === 'es' ? 'Calculado' : 'Computed'}</option>
-                        </select>
-                    </div>
-                    <div>
-                        <Label className="text-[10px] text-slate-400 uppercase">
-                            {config.type === 'random' && (lang === 'es' ? 'Opciones (coma separada)' : 'Options (comma-separated)')}
-                            {config.type === 'fixed' && (lang === 'es' ? 'Valor' : 'Value')}
-                            {config.type === 'computed' && (lang === 'es' ? 'Fórmula' : 'Formula')}
-                            {config.type === 'random_by' && (lang === 'es' ? 'Variable fuente' : 'Source variable')}
-                        </Label>
-                        {config.type === 'random' && (
-                            <Input
-                                value={localOptions}
-                                onChange={(e) => setLocalOptions(e.target.value)}
-                                onBlur={handleOptionsBlur}
-                                className="h-9 text-sm"
-                                placeholder={lang === 'es' ? 'opción1, opción2, opción3' : 'option1, option2, option3'}
-                            />
-                        )}
-                        {config.type === 'fixed' && (
-                            <Input
-                                value={localValue}
-                                onChange={(e) => setLocalValue(e.target.value)}
-                                onBlur={() => onUpdate(varName, { ...config, value: localValue })}
-                                className="h-9 text-sm"
-                            />
-                        )}
-                        {config.type === 'computed' && (
-                            <Input
-                                value={localFormula}
-                                onChange={(e) => setLocalFormula(e.target.value)}
-                                onBlur={() => onUpdate(varName, { ...config, formula: localFormula })}
-                                className="h-9 text-sm font-mono"
-                                placeholder="random(18, 55)"
-                            />
-                        )}
-                        {config.type === 'random_by' && (
-                            <select
-                                value={localSourceVar}
-                                onChange={(e) => {
-                                    setLocalSourceVar(e.target.value);
-                                    onUpdate(varName, { ...config, source_var: e.target.value });
-                                }}
-                                className="w-full h-9 rounded-lg border border-slate-200 text-sm px-2 font-mono"
-                            >
-                                <option value="">{lang === 'es' ? 'Seleccionar variable...' : 'Select variable...'}</option>
-                                {availableSourceVars.map(v => (
-                                    <option key={v} value={v}>{v}</option>
-                                ))}
-                            </select>
-                        )}
-                    </div>
-                </div>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50"
-                    onClick={onDelete}
-                >
-                    <Trash2 className="h-4 w-4" />
-                </Button>
-            </div>
-
-            {/* Expanded editor for random_by mapping */}
-            {config.type === 'random_by' && config.source_var && (
-                <MappingEditor
-                    mapping={config.mapping || {}}
-                    onChange={(newMapping) => onUpdate(varName, { ...config, mapping: newMapping })}
-                    sourceVarConfig={allVars[config.source_var]}
-                    lang={lang}
-                />
-            )}
-        </div>
-    );
-}
-
-// =============== FLOW STEP EDITOR (local state for all text inputs) ===============
 interface FlowStepEditorProps {
     scope: 'flow_steps' | 'global_triggers';
     step: FlowStep;
@@ -381,18 +61,15 @@ function FlowStepEditor({
     isExpanded, onToggle,
     lang
 }: FlowStepEditorProps) {
-    // ---- Local state for text fields ----
     const [localId, setLocalId] = useState(step.id);
     const [localMessage, setLocalMessage] = useState(step.message || '');
     const [localLlmContext, setLocalLlmContext] = useState(step.llm_context || '');
     const [localRagQuery, setLocalRagQuery] = useState(step.rag_action?.query_template || '');
-    // Local state for trigger patterns and condition values (keyed by triggerIndex)
     const [localTriggerPatterns, setLocalTriggerPatterns] = useState<Record<number, string>>({});
     const [localConditionValues, setLocalConditionValues] = useState<Record<number, string>>({});
     const [localPhraseValues, setLocalPhraseValues] = useState<Record<number, string>>({});
     const [localNegativePhraseValues, setLocalNegativePhraseValues] = useState<Record<number, string>>({});
 
-    // Sync local state when step props change (e.g. after save/reload)
     useEffect(() => {
         setLocalId(step.id);
     }, [step.id]);
@@ -409,7 +86,6 @@ function FlowStepEditor({
         setLocalRagQuery(step.rag_action?.query_template || '');
     }, [step.rag_action?.query_template]);
 
-    // Initialize local trigger state from step triggers
     useEffect(() => {
         const patterns: Record<number, string> = {};
         const condValues: Record<number, string> = {};
@@ -684,7 +360,6 @@ function FlowStepEditor({
                         </div>
                     )}
 
-                    {/* Step ID and Mode */}
                     <div className="grid grid-cols-4 gap-4">
                         <div>
                             <Label className="text-[10px] text-slate-400 uppercase">{lang === 'es' ? 'ID del paso' : 'Step ID'}</Label>
@@ -740,7 +415,6 @@ function FlowStepEditor({
                         </div>
                     </div>
 
-                    {/* Message or LLM Context */}
                     <div>
                         <Label className="text-[10px] text-slate-400 uppercase">
                             {step.mode === 'SCRIPTED'
@@ -934,7 +608,6 @@ function FlowStepEditor({
                         </div>
                     )}
 
-                    {/* Triggers */}
                     <div>
                         <div className="flex items-center justify-between mb-2">
                             <Label className="text-[10px] text-slate-400 uppercase">{lang === 'es' ? 'Disparadores' : 'Triggers'}</Label>
@@ -1253,7 +926,6 @@ function FlowStepEditor({
                         </div>
                     </div>
 
-                    {/* Actions */}
                     <div>
                         <div className="flex items-center justify-between mb-2">
                             <Label className="text-[10px] text-slate-400 uppercase">{lang === 'es' ? 'Acciones' : 'Actions'}</Label>
@@ -1382,7 +1054,6 @@ function FlowStepEditor({
     );
 }
 
-// =============== MAIN FLOW EDITOR ===============
 export function FlowEditor({ steps, sessionVars, globalTriggers = [], onChange, lang, hideFlowSteps }: Props) {
     const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
     const [expandedGlobalSteps, setExpandedGlobalSteps] = useState<Set<string>>(new Set());
@@ -1638,7 +1309,6 @@ export function FlowEditor({ steps, sessionVars, globalTriggers = [], onChange, 
         onChange(steps, sessionVars, newGlobal);
     }, [steps, sessionVars, globalTriggers, onChange]);
 
-    // Session Variables
     const addVar = () => {
         const existingCount = Object.keys(sessionVars).length;
         const varName = `var${existingCount + 1}`;
@@ -1779,21 +1449,11 @@ export function FlowEditor({ steps, sessionVars, globalTriggers = [], onChange, 
     }, [steps, globalTriggers]);
 
     return (
-        <div
-            className={cn(
-                "space-y-6",
-                "dark:[&_input]:bg-slate-900 dark:[&_input]:border-slate-700 dark:[&_input]:text-slate-100",
-                "dark:[&_textarea]:bg-slate-900 dark:[&_textarea]:border-slate-700 dark:[&_textarea]:text-slate-100",
-                "dark:[&_select]:bg-slate-900 dark:[&_select]:border-slate-700 dark:[&_select]:text-slate-100",
-                "dark:[&_.bg-white]:bg-slate-900 dark:[&_.bg-slate-50]:bg-slate-800/60",
-                "dark:[&_.text-slate-900]:text-slate-100 dark:[&_.text-slate-800]:text-slate-100 dark:[&_.text-slate-700]:text-slate-200 dark:[&_.text-slate-600]:text-slate-300 dark:[&_.text-slate-500]:text-slate-400 dark:[&_.text-slate-400]:text-slate-500",
-                "dark:[&_.border-slate-200]:border-slate-700 dark:[&_.border-slate-100]:border-slate-800"
-            )}
-        >
+        <div className={cn("space-y-6")}>
             {criticalIssues.length > 0 && (
-                <Card className="bg-red-50/80 border-red-200 rounded-2xl dark:bg-red-950/25 dark:border-red-500/60">
-                    <CardHeader className="py-4 px-6 border-b border-red-200 dark:border-red-500/40">
-                        <CardTitle className="text-sm font-black text-red-700 dark:text-red-300 flex items-center gap-2">
+                <Card className="rounded-2xl border-red-200 bg-red-50/80">
+                    <CardHeader className="border-b border-red-200 px-6 py-4">
+                        <CardTitle className="flex items-center gap-2 text-sm font-black text-red-700">
                             <Zap className="h-4 w-4" />
                             {lang === 'es'
                                 ? `Errores críticos de flujo (${criticalIssues.length})`
@@ -1806,18 +1466,18 @@ export function FlowEditor({ steps, sessionVars, globalTriggers = [], onChange, 
                                 key={`${issue.code}-${idx}`}
                                 type="button"
                                 onClick={() => focusIssue(issue)}
-                                className="w-full text-left px-3 py-2 rounded-lg border border-red-200 bg-white/80 hover:bg-white dark:bg-slate-900/40 dark:hover:bg-slate-900/60 dark:border-red-500/40"
+                                className="w-full rounded-lg border border-red-200 bg-white/80 px-3 py-2 text-left hover:bg-white"
                             >
-                                <p className="text-xs font-semibold text-red-700 dark:text-red-200">{issue.message}</p>
+                                <p className="text-xs font-semibold text-red-700">{issue.message}</p>
                                 {issue.path && (
-                                    <p className="text-[10px] font-mono text-red-500 dark:text-red-300 mt-1">
+                                    <p className="mt-1 text-[10px] font-mono text-red-500">
                                         {issue.path}
                                     </p>
                                 )}
                             </button>
                         ))}
                         {criticalIssues.length > 8 && (
-                            <p className="text-[11px] text-red-600 dark:text-red-300">
+                            <p className="text-[11px] text-red-600">
                                 {lang === 'es'
                                     ? `... y ${criticalIssues.length - 8} error(es) más`
                                     : `... and ${criticalIssues.length - 8} more error(s)`}
@@ -1827,9 +1487,9 @@ export function FlowEditor({ steps, sessionVars, globalTriggers = [], onChange, 
                 </Card>
             )}
             {warningIssues.length > 0 && (
-                <Card className="bg-amber-50/80 border-amber-200 rounded-2xl dark:bg-amber-950/25 dark:border-amber-500/60">
-                    <CardHeader className="py-4 px-6 border-b border-amber-200 dark:border-amber-500/40">
-                        <CardTitle className="text-sm font-black text-amber-700 dark:text-amber-300 flex items-center gap-2">
+                <Card className="rounded-2xl border-amber-200 bg-amber-50/80">
+                    <CardHeader className="border-b border-amber-200 px-6 py-4">
+                        <CardTitle className="flex items-center gap-2 text-sm font-black text-amber-700">
                             <AlertTriangle className="h-4 w-4" />
                             {lang === 'es'
                                 ? `Warnings de flujo (${warningIssues.length})`
@@ -1842,18 +1502,18 @@ export function FlowEditor({ steps, sessionVars, globalTriggers = [], onChange, 
                                 key={`${issue.code}-${idx}`}
                                 type="button"
                                 onClick={() => focusIssue(issue)}
-                                className="w-full text-left px-3 py-2 rounded-lg border border-amber-200 bg-white/80 hover:bg-white dark:bg-slate-900/40 dark:hover:bg-slate-900/60 dark:border-amber-500/40"
+                                className="w-full rounded-lg border border-amber-200 bg-white/80 px-3 py-2 text-left hover:bg-white"
                             >
-                                <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">{issue.message}</p>
+                                <p className="text-xs font-semibold text-amber-800">{issue.message}</p>
                                 {issue.path && (
-                                    <p className="text-[10px] font-mono text-amber-600 dark:text-amber-300 mt-1">
+                                    <p className="mt-1 text-[10px] font-mono text-amber-600">
                                         {issue.path}
                                     </p>
                                 )}
                             </button>
                         ))}
                         {warningIssues.length > 8 && (
-                            <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                            <p className="text-[11px] text-amber-700">
                                 {lang === 'es'
                                     ? `... y ${warningIssues.length - 8} warning(s) más`
                                     : `... and ${warningIssues.length - 8} more warning(s)`}
@@ -1883,7 +1543,7 @@ export function FlowEditor({ steps, sessionVars, globalTriggers = [], onChange, 
                 {showVars && (
                     <CardContent className="p-4 space-y-3">
                         {Object.entries(sessionVars).map(([varName, config], index) => (
-                            <SessionVarRow
+                            <FlowEditorSessionVarRow
                                 key={`var_${index}`}
                                 varName={varName}
                                 config={config}
@@ -1900,7 +1560,6 @@ export function FlowEditor({ steps, sessionVars, globalTriggers = [], onChange, 
                 )}
             </Card>
 
-            {/* Global Triggers Section */}
             <div className="space-y-4">
                 <div className="flex items-center">
                     <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">

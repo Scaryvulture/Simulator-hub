@@ -21,6 +21,7 @@ import {
 
 interface Props {
     bot: PublicChatBot;
+    organizations?: Array<{ id: string; name: string }>;
     userId?: string;
     viewerRole: 'ADMIN' | 'ORG_ADMIN' | 'USER';
     requireAuth?: boolean;
@@ -74,6 +75,7 @@ type SessionMessageResponse = {
     messages?: Array<{ role?: string; content?: string; images?: ChatImage[]; created_at?: string }>;
     ended?: boolean;
     evaluation?: PublicEvaluationResult | null;
+    bot?: PublicChatBot;
 };
 
 const MAX_IMAGES_PER_MESSAGE = 3;
@@ -186,7 +188,6 @@ function getVoiceInputEnvironment(): VoiceInputEnvironment {
     };
 }
 
-// Helper to extract file ID from Google Drive URL
 function getGoogleDriveId(url: string): string | null {
     const patterns = [
         /\/file\/d\/([a-zA-Z0-9_-]+)/,
@@ -231,43 +232,16 @@ function sanitizeMessageForUi(content: string): string {
 
 const RenderedMessage = memo(function RenderedMessage({ content }: { content: string }) {
     const safeContent = sanitizeMessageForUi(content);
-    // Regex to find Markdown images: ![Alt text](URL)
     const mdImageRegex = /(!\[.*?\]\((https?:\/\/[^\s\)]+)\))/g;
-
-    // First, split by Markdown images
     const parts = safeContent.split(mdImageRegex);
-
-    // The split result will look like: 
-    // [text_before, full_match, url, text_after, ...]
-    // Because of capturing groups, 'full_match' and 'url' are included.
-    // We need to process this carefully.
 
     const elements: JSX.Element[] = [];
     let i = 0;
     while (i < parts.length) {
         const part = parts[i];
 
-        // If part matches the full markdown syntax (roughly), it might be the captured group from split?
-        // Actually, split with capturing groups includes the captures.
-        // Index i: text
-        // Index i+1: full match (e.g. ![Alt](url))
-        // Index i+2: url (e.g. http://...)
-
-        // Let's refine the loop logic. 
-        // If we found a match, the next parts are the captures.
-
-        // Wait, split behavior:
-        // "A ![B](C) D".split(...) -> ["A ", "![B](C)", "C", " D"]
-
-        // So:
-        // elements[i] = text
-        // elements[i+1] = full match (skip/use for key)
-        // elements[i+2] = url (use for rendering)
-
         if (i % 3 === 0) {
-            // This is a text part. It might STILL contain raw URLs that are not images.
             if (part) {
-                // Parse raw URLs in this text segment
                 const urlRegex = /(https?:\/\/[^\s]+)/g;
                 const subParts = part.split(urlRegex);
 
@@ -312,7 +286,6 @@ const RenderedMessage = memo(function RenderedMessage({ content }: { content: st
                 });
             }
         } else if (i % 3 === 2) {
-            // This is the URL captured from the markdown image
             const url = part;
             const driveId = getGoogleDriveId(url);
 
@@ -320,7 +293,6 @@ const RenderedMessage = memo(function RenderedMessage({ content }: { content: st
                 const previewUrl = `https://drive.google.com/file/d/${driveId}/preview`;
                 elements.push(
                     <span key={i} className="block my-2">
-                        {/* We hide the text and only show the iframe/image for Markdown Images */}
                         <iframe
                             src={previewUrl}
                             className="w-full max-w-sm h-64 rounded-xl border border-white/10 bg-black/50 shadow-lg"
@@ -332,7 +304,6 @@ const RenderedMessage = memo(function RenderedMessage({ content }: { content: st
                     </span>
                 );
             } else {
-                // Standard image
                 elements.push(
                     <span key={i} className="block my-2">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -346,7 +317,6 @@ const RenderedMessage = memo(function RenderedMessage({ content }: { content: st
                 );
             }
         }
-        // i % 3 === 1 is the full match string, we skip it as we rendered the URL in step 2
 
         i++;
     }
@@ -389,8 +359,10 @@ const ChatMessageRow = memo(function ChatMessageRow({ msg, botName, botLogo, lan
                 msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'
             )}>
                 <div className={cn(
-                    'w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-1 shadow-md',
-                    msg.role === 'user' ? 'bg-primary/20 text-primary border border-primary/20' : 'bg-white/10 text-muted-foreground border border-white/5'
+                    'mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border shadow-sm',
+                    msg.role === 'user'
+                        ? 'border-primary/20 bg-primary/10 text-primary'
+                        : 'border-slate-200 bg-slate-100 text-slate-500'
                 )}>
                     {msg.role === 'user' ? (
                         <User className="w-4 h-4" />
@@ -406,10 +378,10 @@ const ChatMessageRow = memo(function ChatMessageRow({ msg, botName, botLogo, lan
                 </div>
                 <div
                     className={cn(
-                        'rounded-2xl px-5 py-3 text-sm flex flex-col gap-1 shadow-xl backdrop-blur-sm',
+                        'flex flex-col gap-1 rounded-2xl px-5 py-3 text-sm shadow-sm',
                         msg.role === 'user'
-                            ? 'bg-primary text-primary-foreground rounded-tr-none shadow-primary/10'
-                            : 'bg-white/5 text-foreground rounded-tl-none border border-white/10 shadow-black/20'
+                            ? 'rounded-tr-none bg-primary text-primary-foreground'
+                            : 'rounded-tl-none border border-slate-200 bg-white text-slate-800'
                     )}
                 >
                     {renderableImages.length > 0 && (
@@ -420,14 +392,17 @@ const ChatMessageRow = memo(function ChatMessageRow({ msg, botName, botLogo, lan
                                     key={`${idx}-${(img.data_url || '').slice(0, 12)}`}
                                     src={img.data_url}
                                     alt="Attachment"
-                                    className="h-24 w-full object-cover rounded-lg border border-white/20"
+                                    className="h-24 w-full rounded-lg border border-slate-200 object-cover"
                                     loading="lazy"
                                 />
                             ))}
                         </div>
                     )}
                     <RenderedMessage content={msg.content} />
-                    <span className="text-[9px] opacity-40 self-end mt-1 font-mono uppercase tracking-tighter">
+                    <span className={cn(
+                        'mt-1 self-end font-mono text-[9px] uppercase tracking-tighter',
+                        msg.role === 'user' ? 'opacity-70' : 'text-slate-400'
+                    )}>
                         {formattedTime}
                     </span>
                 </div>
@@ -467,7 +442,7 @@ const ChatMessagesList = memo(function ChatMessagesList({
             {isLoading && (
                 <div className="flex justify-start animate-in fade-in">
                     <div className="flex gap-3 max-w-[85%]">
-                        <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center shrink-0 border border-white/5">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                                 src={assistantLogo}
@@ -476,11 +451,11 @@ const ChatMessagesList = memo(function ChatMessagesList({
                                 onError={(e) => { (e.target as HTMLImageElement).src = DEFAULT_BOT_AVATAR; }}
                             />
                         </div>
-                        <div className="bg-white/5 border border-white/10 rounded-2xl rounded-tl-none px-5 py-4 backdrop-blur-sm">
+                        <div className="rounded-2xl rounded-tl-none border border-slate-200 bg-white px-5 py-4">
                             <span className="flex space-x-1.5 h-2 items-center">
-                                <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                                <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                                <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce"></span>
+                                <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                                <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                                <span className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" />
                             </span>
                         </div>
                     </div>
@@ -491,7 +466,8 @@ const ChatMessagesList = memo(function ChatMessagesList({
 });
 
 export function ChatInterface({
-    bot,
+    bot: initialBot,
+    organizations = [],
     userId,
     viewerRole,
     requireAuth = false,
@@ -499,9 +475,14 @@ export function ChatInterface({
     displayMode = 'standard',
 }: Props) {
     const { lang } = useLanguage();
+    const [bot, setBot] = useState(initialBot);
+    const [organizationId, setOrganizationId] = useState(organizations.length === 1 ? organizations[0].id : '');
+    const pendingSendRef = useRef<{ id: string; message: string; images: ChatImage[] } | null>(null);
+    const [sendError, setSendError] = useState<string | null>(null);
+    const sendingRef = useRef(false);
     const preferredBotLogo = bot.logo || bot.config?.logo_url || DEFAULT_BOT_AVATAR;
     const isLtiEmbedded = displayMode === 'lti_embedded';
-    const sessionStorageKey = useMemo(() => `session_${bot.id}`, [bot.id]);
+    const sessionStorageKey = useMemo(() => `session_${userId || "anonymous"}_${bot.id}`, [bot.id, userId]);
 
     const chatFeatures = {
         allow_image_upload: Boolean(bot.config?.chat_features?.allow_image_upload),
@@ -543,12 +524,10 @@ export function ChatInterface({
         inputRef.current?.focus();
     }, [hasStarted, sessionEnded]);
 
-    // Evaluation State
     const [isEvaluating, setIsEvaluating] = useState(false);
     const [showEvaluation, setShowEvaluation] = useState(false);
     const [evaluationResult, setEvaluationResult] = useState<EvaluationResult | null>(null);
 
-    // Camera State
     const [showCamera, setShowCamera] = useState(false);
     const copy = lang === 'es'
         ? {
@@ -567,8 +546,8 @@ export function ChatInterface({
             evaluate_and_end_confirm: 'Esto finalizará la sesión actual y lanzará la evaluación. ¿Quieres continuar?',
             end_session_done: 'Sesión finalizada.',
             end_session_error: 'No se pudo finalizar la sesión.',
-            manager: 'Gestor del Simulador',
-            start_hint: 'Presioná el botón para iniciar la conversación con el simulador',
+            manager: 'Práctica guiada',
+            start_hint: 'Presioná el botón para iniciar la conversación.',
             starting: 'Iniciando...',
             start_chat: 'Iniciar conversación',
             eval_already_done: 'Esta conversación ya estaba evaluada.',
@@ -596,7 +575,7 @@ export function ChatInterface({
             speak_on: 'Voz ON',
             speak_off: 'Voz OFF',
             tts_error: 'No se pudo generar el audio de respuesta.',
-            flow_engine: 'Motor de flujo V1',
+            flow_engine: 'Motor de flujo',
         }
         : {
             eval_done: 'Evaluation completed',
@@ -614,8 +593,8 @@ export function ChatInterface({
             evaluate_and_end_confirm: 'This will close the current session and start the evaluation. Do you want to continue?',
             end_session_done: 'Session ended.',
             end_session_error: 'Unable to end the session.',
-            manager: 'Simulator Manager',
-            start_hint: 'Press the button to start the conversation with the simulator',
+            manager: 'Guided practice',
+            start_hint: 'Press the button to start the conversation.',
             starting: 'Starting...',
             start_chat: 'Start conversation',
             eval_already_done: 'This conversation had already been evaluated.',
@@ -643,7 +622,7 @@ export function ChatInterface({
             speak_on: 'Voice ON',
             speak_off: 'Voice OFF',
             tts_error: 'Unable to generate response audio.',
-            flow_engine: 'Flow Engine V1',
+            flow_engine: 'Flow engine',
         };
 
     const readStoredSessionId = useCallback(() => {
@@ -660,7 +639,7 @@ export function ChatInterface({
         try {
             sessionStorage.setItem(sessionStorageKey, nextSessionId);
         } catch {
-            // Ignore storage failures and keep the in-memory session alive.
+            // Keep the current session if browser storage is unavailable.
         }
     }, [sessionStorageKey]);
 
@@ -669,7 +648,7 @@ export function ChatInterface({
         try {
             sessionStorage.removeItem(sessionStorageKey);
         } catch {
-            // Ignore storage failures and keep the UI recoverable.
+            // Keep the UI usable if browser storage is unavailable.
         }
     }, [sessionStorageKey]);
 
@@ -993,7 +972,7 @@ export function ChatInterface({
         try {
             event.currentTarget.setPointerCapture(event.pointerId);
         } catch {
-            // Some browsers may throw when pointer capture is unavailable.
+            // Pointer capture can fail on some browsers; press-to-talk should still work.
         }
         void startVoiceInputCapture();
     };
@@ -1176,21 +1155,19 @@ export function ChatInterface({
         });
     }, [evaluationResult, isLtiEmbedded, sessionEnded, sessionId]);
 
-    // Initialize session - ALWAYS calls init API, backend handles everything
     const initSession = useCallback(async (newSessionId: string) => {
         if (initCalledRef.current) return;
         initCalledRef.current = true;
-        let sessionCreated = false;
+        setIsLoading(true);
 
         try {
-            // First, create the session in the database
             const createSessionResponse = await fetch('/api/sessions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     sessionId: newSessionId,
                     botId: bot.id,
-                    externalUserId: userId,
+                    organizationId: organizationId || undefined,
                 }),
             });
             if (!createSessionResponse.ok) {
@@ -1204,9 +1181,7 @@ export function ChatInterface({
                 }
                 throw new Error(createSessionError);
             }
-            sessionCreated = true;
 
-            // ALWAYS call init to get intro message (works for ALL bot types now)
             setIsLoading(true);
             const resp = await fetch('/api/chat/init', {
                 method: 'POST',
@@ -1238,7 +1213,6 @@ export function ChatInterface({
                 }]);
                 await speakAssistantMessage(data.introMessage, 'normal', newSessionId);
             } else {
-                // Fallback if no intro configured
                 setMessages([{
                     role: 'assistant',
                     content: copy.fallback_hello,
@@ -1249,30 +1223,21 @@ export function ChatInterface({
             setIsLoading(false);
         } catch (e) {
             console.error('Failed to init session:', e);
-            if (!sessionCreated) {
-                clearStoredSessionId();
-                initCalledRef.current = false;
-                setSessionId(null);
-                setHasStarted(false);
-                setMessages([]);
-                setIsLoading(false);
-                toast.error(getErrorMessage(e));
-                return;
-            }
-            setMessages([{
-                role: 'assistant',
-                content: copy.fallback_hello,
-                timestamp: new Date().toISOString(),
-            }]);
-            toast.error(getErrorMessage(e));
+            clearStoredSessionId();
+            initCalledRef.current = false;
+            setSessionId(null);
+            setHasStarted(false);
+            setMessages([]);
             setIsLoading(false);
+            toast.error(getErrorMessage(e));
         }
-    }, [bot.id, userId, copy.fallback_hello, speakAssistantMessage, lang, handleAuthError, clearStoredSessionId]);
+    }, [bot.id, organizationId, copy.fallback_hello, speakAssistantMessage, lang, handleAuthError, clearStoredSessionId]);
 
-    // Handler for manual chat start
     const handleStartChat = async () => {
-        if (typeof window === 'undefined') return;
-
+        if (typeof window === 'undefined' || (organizations.length > 1 && !organizationId)) return;
+        setBot(initialBot);
+        setSendError(null);
+        pendingSendRef.current = null;
         const newSessionId = crypto.randomUUID();
         persistSessionId(newSessionId);
         setSessionId(newSessionId);
@@ -1281,13 +1246,10 @@ export function ChatInterface({
     };
 
     useEffect(() => {
-        // Only access sessionStorage on client side
         if (typeof window === 'undefined') return;
 
-        // Force new session if requested
         if (forceNewSession) {
             clearStoredSessionId();
-            // Clean up the URL to avoid re-triggering on refresh
             const url = new URL(window.location.href);
             if (url.searchParams.has('new')) {
                 url.searchParams.delete('new');
@@ -1295,7 +1257,6 @@ export function ChatInterface({
             }
         }
 
-        // Reset state when bot changes
         initCalledRef.current = false;
         setMessages([]);
         setInput('');
@@ -1314,7 +1275,6 @@ export function ChatInterface({
         cleanupVoiceCapture();
         stopAudioPlayback();
 
-        // Check for existing session (resumed session in same tab)
         const storedSession = readStoredSessionId();
         if (storedSession) {
             if (!isValidUuid(storedSession)) {
@@ -1325,7 +1285,6 @@ export function ChatInterface({
             }
             setSessionId(storedSession);
             setHasStarted(true);
-            // Load existing messages from database
             const controller = new AbortController();
             fetch(`/api/sessions/${encodeURIComponent(storedSession)}/messages`, { signal: controller.signal })
                 .then(async (res) => {
@@ -1355,6 +1314,7 @@ export function ChatInterface({
                     }
 
                     const data = result.data;
+                    if (data.bot) setBot(data.bot);
                     if (data.messages && data.messages.length > 0) {
                         setMessages(data.messages.map((m) => ({
                             role: m.role === 'assistant' || m.role === 'system' ? m.role : 'user',
@@ -1368,7 +1328,6 @@ export function ChatInterface({
                 })
                 .catch((error: unknown) => {
                     if (error instanceof DOMException && error.name === 'AbortError') return;
-                    // If error loading messages, reset session
                     clearStoredSessionId();
                     initCalledRef.current = false;
                     setSessionId(null);
@@ -1376,7 +1335,6 @@ export function ChatInterface({
                 });
             return () => controller.abort();
         } else {
-            // No stored session, ensure we show start button
             setSessionId(null);
             setHasStarted(false);
         }
@@ -1405,15 +1363,16 @@ export function ChatInterface({
 
     const handleSend = async (messageOverride?: string) => {
         const composedMessage = typeof messageOverride === 'string' ? messageOverride : input;
-        if ((!composedMessage.trim() && selectedImages.length === 0) || isLoading || sessionEnded || !sessionId) return;
-
+        if ((!composedMessage.trim() && selectedImages.length === 0) || sendingRef.current || isLoading || sessionEnded || !sessionId) return;
         const userMsg = composedMessage.trim();
-        const payloadImages = selectedImages.map((img) => ({
-            mime_type: img.mime_type,
-            data_url: img.data_url,
-        }));
-        setInput('');
-        setSelectedImages([]);
+        const payloadImages = selectedImages.map(({ mime_type, data_url }) => ({ mime_type, data_url }));
+        const previous = pendingSendRef.current;
+        const samePayload = previous?.message === userMsg && JSON.stringify(previous.images) === JSON.stringify(payloadImages);
+        const requestId = samePayload ? previous!.id : crypto.randomUUID();
+        pendingSendRef.current = { id: requestId, message: userMsg, images: payloadImages };
+        sendingRef.current = true;
+        setSendError(null);
+        setIsLoading(true);
         setIsListening(false);
         voicePressActiveRef.current = false;
         activeVoicePointerIdRef.current = null;
@@ -1421,58 +1380,40 @@ export function ChatInterface({
             skipTranscriptionRef.current = true;
             mediaRecorderRef.current.stop();
         }
-        setMessages((prev) => [...prev, {
-            role: 'user',
-            content: userMsg || copy.image_only,
-            images: payloadImages,
-            timestamp: new Date().toISOString(),
-        }]);
-        setIsLoading(true);
-
         try {
             const resp = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    sessionId,
-                    botId: bot.id,
-                    message: userMsg,
-                    images: payloadImages,
-                    input_mode: 'normal',
-                }),
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId, botId: bot.id, requestId, message: userMsg, images: payloadImages, input_mode: 'normal' }),
             });
-
-            const data = await resp.json().catch(() => ({})) as { error?: string; content?: string; ended?: boolean };
+            const data = await resp.json().catch(() => ({})) as { error?: string; content?: string; ended?: boolean; end_reason?: string };
             if (!resp.ok || data.error) {
                 if (handleAuthError(data.error, resp.status)) return;
                 throw new Error(data.error || (lang === 'es' ? 'No se pudo enviar el mensaje.' : 'Failed to send message.'));
             }
             const assistantText = data.content || '';
-            setMessages((prev) => [...prev, {
-                role: 'assistant',
-                content: assistantText,
-                timestamp: new Date().toISOString(),
-            }]);
+            // Only confirmed messages enter the transcript. Retry keeps its original ID.
+            if (!data.end_reason) setMessages((prev) => [...prev,
+                { role: 'user', content: userMsg || copy.image_only, images: payloadImages, timestamp: new Date().toISOString() },
+                { role: 'assistant', content: assistantText, timestamp: new Date().toISOString() },
+            ]);
+            setInput('');
+            setSelectedImages([]);
+            pendingSendRef.current = null;
+            if (data.ended) setSessionEnded(true);
             await speakAssistantMessage(assistantText, 'normal');
-
-            // Check if session ended (from flow engine)
-            if (data.ended) {
-                setSessionEnded(true);
-            }
-        } catch (e: unknown) {
-            console.error(e);
-            setMessages((prev) => [...prev, {
-                role: 'assistant',
-                content: "Error: " + getErrorMessage(e),
-                timestamp: new Date().toISOString(),
-            }]);
+        } catch (error: unknown) {
+            setInput(userMsg);
+            setSendError(getErrorMessage(error));
         } finally {
+            sendingRef.current = false;
             setIsLoading(false);
             focusTextInput();
         }
     };
 
     const handleReset = () => {
+        setSendError(null);
+        pendingSendRef.current = null;
         clearStoredSessionId();
         initCalledRef.current = false;
         setSessionId(null);
@@ -1569,51 +1510,52 @@ export function ChatInterface({
     const primaryActionPending = isEndingSession || isEvaluating;
     const showPrimaryAction = Boolean(sessionId && primaryActionMode);
     const primaryActionClassName = cn(
-        "font-bold text-xs gap-2",
+        "h-10 rounded-2xl border font-semibold text-xs gap-2",
         primaryActionMode === 'end'
             ? "border-amber-300 text-amber-700 hover:bg-amber-50"
             : "border-primary/20 text-primary hover:bg-primary/10"
     );
     const surfaceClassName = cn(
-        "flex flex-col h-full w-full overflow-hidden border-white/10",
+        "flex h-full w-full flex-col overflow-hidden border",
         isLtiEmbedded
-            ? "rounded-2xl border bg-background/95 shadow-lg"
-            : "glass shadow-2xl rounded-3xl"
+            ? "rounded-[22px] border-slate-200 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.05)]"
+            : "rounded-[24px] border-slate-200 bg-white shadow-[0_10px_28px_rgba(15,23,42,0.05)]"
     );
     const headerClassName = cn(
-        "border-b border-white/5 flex justify-between items-center",
+        "flex items-center justify-between border-b",
         isLtiEmbedded
-            ? "px-4 py-3 bg-background/90"
-            : "p-4 bg-white/5 backdrop-blur-md"
+            ? "border-slate-200 bg-slate-50/72 px-4 py-3"
+            : "border-slate-200 bg-slate-50/72 px-5 py-4"
     );
     const messagesClassName = cn(
-        "flex-1 overflow-y-auto space-y-6 custom-scroll bg-gradient-to-b from-transparent to-black/5",
-        isLtiEmbedded ? "p-4" : "p-6"
+        "custom-scroll flex-1 space-y-5 overflow-y-auto bg-slate-50/38",
+        isLtiEmbedded
+            ? "p-4"
+            : "p-5"
     );
     const inputAreaClassName = cn(
-        "border-t border-white/5",
+        "border-t",
         isLtiEmbedded
-            ? "px-4 pb-4 pt-3 bg-background/90"
-            : "p-6 pt-2 bg-white/5 backdrop-blur-md"
+            ? "border-slate-200 bg-white px-4 pb-4 pt-3"
+            : "border-slate-200 bg-white px-5 pb-5 pt-4"
     );
     const startScreenClassName = cn(
-        "flex flex-col items-center justify-center h-full animate-in fade-in duration-500",
+        "flex h-full flex-col items-center justify-center animate-in fade-in duration-500",
         isLtiEmbedded ? "gap-4" : "gap-6"
     );
     const startCardClassName = cn(
-        "rounded-3xl bg-white/10 flex items-center justify-center border border-white/10 shadow-lg overflow-hidden",
-        isLtiEmbedded ? "w-20 h-20 p-2" : "w-28 h-28 p-3"
+        "flex items-center justify-center overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm",
+        isLtiEmbedded ? "h-20 w-20 p-2" : "h-24 w-24 p-3"
     );
     const showResetAction = !isLtiEmbedded;
-    const showFlowEngineBadge = !isLtiEmbedded;
+    const showFlowEngineBadge = false;
 
     return (
         <div className={surfaceClassName}>
-            {/* Chat Header */}
             <div className={headerClassName}>
                 <div className="flex items-center space-x-4">
                     <div className="relative">
-                        <div className="w-10 h-10 rounded-2xl bg-white flex items-center justify-center shadow-lg overflow-hidden">
+                        <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                                 src={headerBotLogoSrc}
@@ -1624,22 +1566,22 @@ export function ChatInterface({
                             />
                         </div>
                         <div className={cn(
-                            "absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-slate-900",
+                            "absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-white",
                             sessionEnded ? "bg-red-500" : "bg-green-500 animate-pulse"
                         )} />
                     </div>
                     <div>
-                        <h2 className="font-bold text-lg leading-tight">{bot.name}</h2>
+                        <h2 className="text-base font-bold leading-tight text-slate-900">{bot.name}</h2>
                         <div className="flex items-center gap-2">
                             <span className={cn(
-                                "text-[10px] font-bold uppercase tracking-widest",
-                                sessionEnded ? "text-red-400" : "text-primary"
+                                "text-[10px] font-bold uppercase tracking-[0.16em]",
+                                sessionEnded ? "text-red-500" : "text-primary"
                             )}>
                                 {sessionEnded ? copy.session_ended : copy.session_active}
                             </span>
 
-                            <div className="w-1 h-1 rounded-full bg-primary/40" />
-                            <span className="text-[10px] text-muted-foreground font-mono">{sessionId?.slice(0, 8)}</span>
+                            <div className="h-1 w-1 rounded-full bg-primary/40" />
+                            <span className="font-mono text-[10px] text-slate-400">{sessionId?.slice(0, 8)}</span>
                         </div>
                     </div>
                 </div>
@@ -1671,7 +1613,7 @@ export function ChatInterface({
                         <Button
                             variant="outline"
                             size="sm"
-                            className="font-bold text-xs gap-2 border-slate-300 text-slate-600 hover:bg-slate-100"
+                            className="h-10 rounded-2xl border-slate-200 px-4 text-xs font-semibold text-slate-600 hover:bg-slate-100"
                             onClick={handleReset}
                             title={copy.reset_session}
                         >
@@ -1682,10 +1624,8 @@ export function ChatInterface({
                 </div>
             </div>
 
-            {/* Chat Messages */}
             <div className={messagesClassName} ref={scrollRef}>
                 {!hasStarted ? (
-                    /* Start Button - Shown before conversation begins */
                     <div className={startScreenClassName}>
                         <div className={startCardClassName}>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1698,20 +1638,29 @@ export function ChatInterface({
                             />
                         </div>
                         <div className="text-center space-y-2">
-                            <h3 className="text-xl font-bold">{bot.name}</h3>
+                            <h3 className="text-xl font-bold text-slate-900">{bot.name}</h3>
                             {!isLtiEmbedded && (
-                                <p className="text-[10px] text-muted-foreground/60 font-bold uppercase tracking-widest">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
                                     {copy.manager}
                                 </p>
                             )}
-                            <p className="text-sm text-muted-foreground max-w-xs">
+                            <p className="max-w-xs text-sm text-slate-500">
                                 {copy.start_hint}
                             </p>
                         </div>
+                        {organizations.length > 1 && !isLtiEmbedded && (
+                            <label className="flex w-full max-w-xs flex-col gap-2 text-sm">
+                                {lang === 'es' ? 'Organización de esta práctica' : 'Organization for this practice'}
+                                <select value={organizationId} onChange={(event) => setOrganizationId(event.target.value)} className="rounded-xl border bg-white p-3">
+                                    <option value="">{lang === 'es' ? 'Elegí una organización' : 'Choose an organization'}</option>
+                                    {organizations.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+                                </select>
+                            </label>
+                        )}
                         <Button
                             onClick={handleStartChat}
-                            disabled={isLoading}
-                            className="h-14 px-8 rounded-2xl bg-primary hover:bg-primary/90 shadow-lg shadow-primary/30 text-lg font-bold gap-3 group"
+                            disabled={isLoading || (organizations.length > 1 && !organizationId)}
+                            className="h-12 rounded-2xl px-6 text-sm font-semibold shadow-sm group"
                         >
                             {isLoading ? (
                                 <span className="flex items-center gap-2">
@@ -1727,7 +1676,6 @@ export function ChatInterface({
                         </Button>
                     </div>
                 ) : (
-                    /* Chat messages - Shown after conversation starts */
                     <>
                         <ChatMessagesList
                             messages={messages}
@@ -1740,10 +1688,9 @@ export function ChatInterface({
                 )}
             </div>
 
-            {/* Chat Input */}
             <div className={inputAreaClassName}>
                 {selectedImages.length > 0 && (
-                    <div className="mb-3 p-3 rounded-xl border border-white/10 bg-black/10">
+                    <div className="mb-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
                         <div className="grid grid-cols-3 gap-2">
                             {selectedImages.map((img, idx) => (
                                 <div key={`${idx}-${(img.data_url || '').slice(0, 10)}`} className="relative">
@@ -1751,12 +1698,12 @@ export function ChatInterface({
                                     <img
                                         src={img.data_url || ''}
                                         alt="Selected"
-                                        className="w-full h-auto max-h-48 object-contain rounded-lg border border-white/10 bg-black/40"
+                                        className="h-auto max-h-48 w-full rounded-lg border border-slate-200 bg-white object-contain"
                                     />
                                     <button
                                         type="button"
                                         onClick={() => setSelectedImages((prev) => prev.filter((_, i) => i !== idx))}
-                                        className="absolute top-1 right-1 h-5 w-5 rounded-full bg-black/70 text-white flex items-center justify-center"
+                                        className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-900/80 text-white"
                                     >
                                         <X className="h-3 w-3" />
                                     </button>
@@ -1781,7 +1728,7 @@ export function ChatInterface({
                             onClick={(event) => event.preventDefault()}
                             disabled={isLoading || sessionEnded || isTranscribing || !sessionId || !hasStarted}
                             className={cn(
-                                "h-12 w-12 rounded-xl border-white/20",
+                                "h-12 w-12 rounded-xl border-slate-200 bg-white",
                                 (isListening || isTranscribing) && "border-primary text-primary"
                             )}
                             title={sttSupported ? copy.hold_to_talk : getVoiceInputErrorMessage(voiceInputUnavailableReason)}
@@ -1811,7 +1758,7 @@ export function ChatInterface({
                                 variant="outline"
                                 size="icon"
                                 disabled={isLoading || sessionEnded}
-                                className="h-12 w-12 rounded-xl border-white/20"
+                                className="h-12 w-12 rounded-xl border-slate-200 bg-white"
                                 onClick={() => galleryInputRef.current?.click()}
                                 title={copy.upload_gallery}
                             >
@@ -1822,7 +1769,7 @@ export function ChatInterface({
                                 variant="outline"
                                 size="icon"
                                 disabled={isLoading || sessionEnded}
-                                className="h-12 w-12 rounded-xl border-white/20"
+                                className="h-12 w-12 rounded-xl border-slate-200 bg-white"
                                 onClick={() => setShowCamera(true)}
                                 title={copy.upload_camera}
                             >
@@ -1839,6 +1786,9 @@ export function ChatInterface({
                         </>
                     )}
 
+                    {sendError && <div role="alert" className="text-sm text-red-700">
+                        {sendError} {lang === 'es' ? 'Tu respuesta se conservó. Volvé a enviar para reintentar.' : 'Your reply was kept. Send again to retry.'}
+                    </div>}
                     <form
                         onSubmit={(e) => {
                             e.preventDefault();
@@ -1847,6 +1797,7 @@ export function ChatInterface({
                         className="relative group flex-1"
                     >
                         <Input
+                            aria-label={lang === 'es' ? 'Tu mensaje' : 'Your message'}
                             ref={inputRef}
                             value={input}
                             onChange={(e) => {
@@ -1855,13 +1806,14 @@ export function ChatInterface({
                             placeholder={sessionEnded
                                 ? (isLtiEmbedded ? copy.session_ended : copy.input_ended)
                                 : copy.input_active}
-                            className="w-full h-14 pl-6 pr-16 rounded-2xl bg-background/50 border-white/10 focus:border-primary/50 focus:ring-primary/20 transition-all text-base placeholder:text-muted-foreground/30"
+                            className="h-14 w-full rounded-2xl border-slate-200 bg-slate-50 pl-6 pr-16 text-base text-slate-900 transition-all placeholder:text-slate-400 focus:border-primary/50 focus:ring-primary/20"
                             disabled={isLoading || sessionEnded}
                         />
                         <Button
                             type="submit"
+                            aria-label={lang === 'es' ? 'Enviar mensaje' : 'Send message'}
                             size="icon"
-                            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-xl h-10 w-10 shadow-lg shadow-primary/20 group-hover:scale-105 active:scale-95 transition-all"
+                            className="absolute right-2 top-1/2 h-10 w-10 -translate-y-1/2 rounded-xl shadow-sm transition-all group-hover:scale-105 active:scale-95"
                             disabled={isLoading || (!input.trim() && selectedImages.length === 0) || sessionEnded}
                         >
                             <Send className="w-5 h-5" />
@@ -1875,7 +1827,7 @@ export function ChatInterface({
                             size="icon"
                             onClick={() => setTtsEnabled((prev) => !prev)}
                             className={cn(
-                                "h-12 w-12 rounded-xl border-white/20",
+                                "h-12 w-12 rounded-xl border-slate-200 bg-white",
                                 ttsEnabled && "border-primary text-primary"
                             )}
                             title={ttsEnabled ? copy.speak_on : copy.speak_off}
@@ -1885,7 +1837,7 @@ export function ChatInterface({
                     )}
                 </div>
                 {(isListening || isTranscribing) && (
-                    <p className="text-[10px] text-primary mt-2 font-semibold">
+                    <p className="mt-2 text-[10px] font-semibold text-primary">
                         {isTranscribing
                             ? copy.transcribing
                             : copy.listening}

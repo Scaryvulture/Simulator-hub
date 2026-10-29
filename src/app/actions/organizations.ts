@@ -486,7 +486,9 @@ export async function updateMemberRole(memberId: string, role: OrgRole): Promise
 // Bot Actions
 export async function addBotToOrg(orgId: string, botId: string): Promise<ActionResult<null>> {
     try {
-        await requireOrganizationWriteAccess(orgId);
+        await verifyAdmin();
+        const bot = await prisma.bot.findFirst({ where: { id: botId, deleted_at: null }, select: { id: true } });
+        if (!bot) return actionFailure('Bot not found');
         try {
             await prisma.organizationBot.create({
                 data: {

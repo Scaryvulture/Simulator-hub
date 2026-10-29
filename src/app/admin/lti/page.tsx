@@ -7,7 +7,8 @@ import {
     getLtiReportingOrganizationOptions,
     saveLtiActivityMapping,
 } from '@/app/actions/lti';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
+import { AdminPanel } from '@/components/admin/admin-panel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -80,7 +81,7 @@ export default async function AdminLtiPage({
     const copy = lang === 'es'
         ? {
             title: 'Mapeos de Actividades LTI',
-            subtitle: 'Conecta cada actividad de la LMS con un bot y, si hace falta, con una organización de reporting distinta de la organización wrapper.',
+            subtitle: 'Relaciona cada actividad de la LMS con un bot y su alcance de reporting.',
             searchLabel: 'Búsqueda general',
             botSearchLabel: 'Bot elegible',
             orgSearchLabel: 'Organización de reporting',
@@ -93,7 +94,7 @@ export default async function AdminLtiPage({
             statusActive: 'Activos',
             statusDisabled: 'Deshabilitados',
             cardTitle: 'Actividades detectadas en la LMS',
-            cardDescription: 'Las actividades pendientes se registran automáticamente durante el launch y quedan aquí hasta que se configure su bot y su alcance de reporting.',
+            cardDescription: 'Actividades detectadas durante el launch y pendientes de mapeo o seguimiento.',
             empty: 'Todavía no se encontraron actividades LTI para este filtro.',
             colStatus: 'Estado',
             colWrapper: 'Última organización wrapper detectada',
@@ -113,8 +114,7 @@ export default async function AdminLtiPage({
             disable: 'Deshabilitar',
             emptyDeployment: '(vacío)',
             noOrg: 'n/d',
-            autoAssignHint: 'Si el bot no estaba asignado a la organización efectiva, esta pantalla lo asigna automáticamente al guardar.',
-            candidateHint: 'Los desplegables muestran una lista acotada. Usa los filtros de bot y organización para traer otros candidatos sin cargar todo el catálogo.',
+            autoAssignHint: 'Al guardar, el bot se asigna automaticamente a la organizacion efectiva si aun no lo estaba.',
             noticeSaved: 'Mapeo LTI guardado correctamente.',
             noticeDisabled: 'Mapeo LTI deshabilitado correctamente.',
             page: 'Página',
@@ -122,7 +122,7 @@ export default async function AdminLtiPage({
         }
         : {
             title: 'LTI Activity Mappings',
-            subtitle: 'Map each LMS activity to a bot and, optionally, to a reporting organization distinct from the wrapper organization.',
+            subtitle: 'Link each LMS activity to a bot and its reporting scope.',
             searchLabel: 'General search',
             botSearchLabel: 'Eligible bot',
             orgSearchLabel: 'Reporting organization',
@@ -135,7 +135,7 @@ export default async function AdminLtiPage({
             statusActive: 'Active',
             statusDisabled: 'Disabled',
             cardTitle: 'Discovered LMS Activities',
-            cardDescription: 'Pending activities are captured automatically during launch and wait here until a bot and reporting scope are configured.',
+            cardDescription: 'Activities captured during launch and pending mapping or follow-up.',
             empty: 'No LTI activities found for this filter yet.',
             colStatus: 'Status',
             colWrapper: 'Last Seen Wrapper Organization',
@@ -155,8 +155,7 @@ export default async function AdminLtiPage({
             disable: 'Disable',
             emptyDeployment: '(empty)',
             noOrg: 'n/a',
-            autoAssignHint: 'If the bot was not assigned to the effective organization yet, this screen assigns it automatically on save.',
-            candidateHint: 'Select inputs show a limited candidate list. Use the bot and organization filters to bring in additional options without loading the full catalog.',
+            autoAssignHint: 'Saving also assigns the bot to the effective organization if needed.',
             noticeSaved: 'LTI mapping saved successfully.',
             noticeDisabled: 'LTI mapping disabled successfully.',
             page: 'Page',
@@ -258,17 +257,19 @@ export default async function AdminLtiPage({
 
     return (
         <div className="space-y-6">
-            <div>
-                <div>
-                    <h1 className="text-4xl font-black tracking-tighter text-slate-900">{copy.title}</h1>
-                    <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                        {copy.subtitle}
-                    </p>
-                </div>
-            </div>
+            <AdminPageHeader
+                variant="directory"
+                eyebrow={lang === 'es' ? 'Administración' : 'Administration'}
+                title={copy.title}
+                description={copy.subtitle}
+            />
 
-            <Card className="overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm">
-                <CardContent className="p-6">
+            <AdminPanel
+                variant="section"
+                title={lang === 'es' ? 'Filtros' : 'Filters'}
+                description={lang === 'es' ? 'Bot, organización y estado de cada actividad detectada.' : 'Bot, organization and status for each discovered activity.'}
+            >
+                <div className="space-y-4">
                     <form
                         className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.8fr)_minmax(220px,1fr)_minmax(220px,1fr)_auto]"
                         method="GET"
@@ -320,13 +321,36 @@ export default async function AdminLtiPage({
                         </div>
                         <div className="flex items-end">
                             <input type="hidden" name="status" value={status} />
-                            <Button type="submit" className="h-10 w-full lg:w-auto">
+                            <Button type="submit" className="h-11 w-full rounded-2xl px-5 font-semibold lg:w-auto">
                                 {copy.filter}
                             </Button>
                         </div>
                     </form>
-                </CardContent>
-            </Card>
+                    <div className="flex flex-wrap gap-2">
+                        {statusLinks.map((item) => {
+                            const href = buildAdminLtiHref({
+                                status: item.value,
+                                search,
+                                botSearch,
+                                orgSearch,
+                            });
+                            const active = item.value === status;
+                            return (
+                                <Link key={item.value} href={href} prefetch={false}>
+                                    <span className={[
+                                        'inline-flex h-10 items-center rounded-xl border px-3 text-sm font-semibold transition-colors',
+                                        active
+                                            ? 'border-primary/25 bg-primary/10 text-primary'
+                                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
+                                    ].join(' ')}>
+                                        {item.label}
+                                    </span>
+                                </Link>
+                            );
+                        })}
+                    </div>
+                </div>
+            </AdminPanel>
 
             {notice ? (
                 <div
@@ -341,41 +365,12 @@ export default async function AdminLtiPage({
                 </div>
             ) : null}
 
-            <div className="flex flex-wrap gap-2">
-                {statusLinks.map((item) => {
-                    const href = buildAdminLtiHref({
-                        status: item.value,
-                        search,
-                        botSearch,
-                        orgSearch,
-                    });
-                    const active = item.value === status;
-                    return (
-                        <Link key={item.value} href={href} prefetch={false}>
-                            <span className={[
-                                'inline-flex h-9 items-center rounded-lg border px-3 text-sm font-bold transition-colors',
-                                active
-                                    ? 'border-primary/25 bg-primary/10 text-primary'
-                                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
-                            ].join(' ')}>
-                                {item.label}
-                            </span>
-                        </Link>
-                    );
-                })}
-            </div>
-
-            <Card className="border-slate-200 bg-white shadow-sm">
-                <CardHeader>
-                    <CardTitle>{copy.cardTitle}</CardTitle>
-                    <CardDescription>
-                        {copy.cardDescription}
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-600">
-                        {copy.candidateHint}
-                    </div>
+            <AdminPanel
+                variant="section"
+                title={copy.cardTitle}
+                description={copy.cardDescription}
+                contentClassName="space-y-4"
+            >
                     {mappings.length === 0 ? (
                         <div className="rounded-2xl border border-dashed border-slate-200 p-10 text-center text-sm text-slate-500">
                             {copy.empty}
@@ -426,7 +421,7 @@ export default async function AdminLtiPage({
                                                     <select
                                                         name="botId"
                                                         defaultValue={mapping.bot_id || ''}
-                                                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700"
+                                                        className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"
                                                     >
                                                         <option value="">{copy.unassigned}</option>
                                                         {bots.map((bot) => (
@@ -441,7 +436,7 @@ export default async function AdminLtiPage({
                                                     <select
                                                         name="reportingOrganizationId"
                                                         defaultValue={mapping.reporting_organization_id || ''}
-                                                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700"
+                                                        className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700"
                                                     >
                                                         <option value="">{copy.baseWrapperOrganization}</option>
                                                         {organizations.map((organization) => (
@@ -456,7 +451,7 @@ export default async function AdminLtiPage({
                                                     <div className="text-[11px] leading-relaxed text-slate-400">
                                                         {copy.autoAssignHint}
                                                     </div>
-                                                    <Button type="submit" size="sm" className="w-full">
+                                                    <Button type="submit" size="sm" className="w-full rounded-xl">
                                                         {copy.saveMapping}
                                                     </Button>
                                                 </form>
@@ -473,7 +468,7 @@ export default async function AdminLtiPage({
                                             <TableCell className="text-right">
                                                 <form action={handleDisableMapping}>
                                                     <input type="hidden" name="mappingId" value={mapping.id} />
-                                                    <Button type="submit" size="sm" variant="outline">
+                                                    <Button type="submit" size="sm" variant="outline" className="rounded-xl border-slate-200">
                                                         {copy.disable}
                                                     </Button>
                                                 </form>
@@ -529,8 +524,7 @@ export default async function AdminLtiPage({
                             </Pagination>
                         </div>
                     ) : null}
-                </CardContent>
-            </Card>
+            </AdminPanel>
         </div>
     );
 }

@@ -1,4 +1,6 @@
 'use server';
+import { assertCanCreateSession } from '@/lib/chat-access';
+import { lockBot, ensurePublishedVersion, getPublishedRuntimeBot } from '@/lib/runtime-bot';
 
 import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
@@ -202,20 +204,14 @@ export async function getPublicBot(
     id: string,
     options: { includeUnpublished?: boolean } = {}
 ): Promise<PublicBot | null> {
-    const bot = await prisma.bot.findFirst({
-        where: { id, deleted_at: null },
-        select: {
-            id: true,
-            name: true,
-            bot_type: true,
-            published: true,
-            logo: true,
-            config: true,
-        },
-    });
-
-    if (!bot) return null;
-    if (!options.includeUnpublished && !bot.published) return null;
+    const user = await getCurrentUser();
+    if (!user) return null;
+    // Public server actions must not allow callers to opt into drafts.
+    const includeUnpublished = options.includeUnpublished && user.role === 'ADMIN';
+    const current = await prisma.bot.findFirst({ where: { id, deleted_at: null }, select: { published: true } });
+    if (!current || (!includeUnpublished && !current.published)) return null;
+    await assertCanCreateSession(id, user);
+    const bot = await getPublishedRuntimeBot(id);
 
     // Explicit allowlist projection: never expose API key/system prompt internals.
     return toPublicBotResponse(bot);
@@ -463,9 +459,12 @@ export async function updateBot(id: string, data: {
             // Keep legacy top-level vector store field aligned with rag_config.
             updateData.openai_vector_store_id = inferredVectorStoreId;
         }
-        if (data.published !== undefined) updateData.published = data.published;
+        // Publication only occurs through the validated release action.
+        if (data.published === false) updateData.published = false;
 
         const bot = await prisma.$transaction(async (tx) => {
+            const current = await lockBot(tx, id);
+            if (current.published) await ensurePublishedVersion(tx, current);
             const updated = await tx.bot.update({
                 where: { id },
                 data: updateData,

@@ -8,7 +8,9 @@ import type { BotConfig } from '@/lib/schemas/bot-config';
 import { decrypt, isEncrypted } from '@/lib/crypto';
 import { normalizeRagConfig } from '@/lib/rag-config';
 import { lintFlowConfig, formatCriticalFlowLintError, type FlowLintReport } from '@/lib/flow-linter';
-import type { Prisma } from '@prisma/client';
+import type { Bot, Prisma } from '@prisma/client';
+import { appendVersion, ensurePublishedVersion, lockBot } from '@/lib/runtime-bot';
+import { readVersionSnapshot } from '@/lib/runtime-snapshot';
 import { createOpenAIClient } from '@/lib/ai-client';
 import { PricingService } from '@/lib/pricing';
 import { collectRuntimePricingModels } from '@/lib/pricing-models';
@@ -36,23 +38,10 @@ function normalizeAndValidateConfig(rawConfig: unknown, context = 'config'): Bot
     return parsed.data;
 }
 
-async function nextVersionNumber(botId: string) {
-    const latestVersion = await prisma.botVersion.findFirst({
-        where: { bot_id: botId },
-        orderBy: { version_number: 'desc' }
-    });
-    return (latestVersion?.version_number || 0) + 1;
-}
-
 type BotRagContext = {
     api_key: string | null;
     openai_vector_store_id: string | null;
 };
-
-function getPrimaryVectorStoreId(config: BotConfig): string | null {
-    const rag = normalizeRagConfig(config?.rag_config || {}, null);
-    return rag.vector_store_ids[0] || null;
-}
 
 async function assertVectorStoresReadyForProd(bot: BotRagContext, config: BotConfig) {
     const rag = normalizeRagConfig(config?.rag_config || {}, bot.openai_vector_store_id);
@@ -150,305 +139,120 @@ async function assertPricingReadyForRelease(params: {
     );
 }
 
-export async function createBotVersion(botId: string, note?: string) {
+async function validatedDraft(botId: string): Promise<Bot> {
+    const bot = await prisma.bot.findFirst({ where: { id: botId, deleted_at: null } });
+    if (!bot) throw new Error('Bot not found');
+    return { ...bot, config: normalizeAndValidateConfig(bot.config) } as Bot;
+}
+
+function fingerprint(bot: Bot) {
+    return JSON.stringify([bot.config, bot.bot_type, bot.openai_prompt_id, bot.openai_vector_store_id, bot.prompt_version]);
+}
+
+async function releaseChecks(bot: Bot, stage: 'STAGING' | 'PROD') {
+    const config = normalizeAndValidateConfig(bot.config);
+    const lint = lintFlowConfig(config);
+    if (lint.critical_count) throw new Error(formatCriticalFlowLintError(lint, 'Hay errores críticos de flujo.'));
+    await assertPricingReadyForRelease({ botId: bot.id, botType: bot.bot_type, openaiPromptId: bot.openai_prompt_id, config, stage });
+    if (stage === 'PROD') await assertVectorStoresReadyForProd(bot, config);
+    return lint;
+}
+
+export async function createBotVersion(botId: string, _note?: string) {
     await verifyAdmin();
-
-    const bot = await prisma.bot.findUnique({
-        where: { id: botId },
-        select: {
-            config: true,
-            prompt_version: true,
-            deleted_at: true,
-        },
+    return prisma.$transaction(async (tx) => {
+        const bot = await lockBot(tx, botId);
+        normalizeAndValidateConfig(bot.config);
+        // A free-form label must never create an active PROD version.
+        return appendVersion(tx, bot, 'SNAPSHOT');
     });
-    if (!bot || bot.deleted_at) throw new Error('Bot not found');
-    const validatedConfig = normalizeAndValidateConfig(bot.config, 'createBotVersion.current_bot');
-    const resolvedConfig = validatedConfig;
-    const nextVersion = await nextVersionNumber(botId);
-
-    const version = await prisma.botVersion.create({
-        data: {
-            bot_id: botId,
-            version_number: nextVersion,
-            config: resolvedConfig as Prisma.InputJsonValue,
-            prompt_version: bot.prompt_version || '1',
-            environment: note || 'SNAPSHOT', // Using environment field as Label/Type for now
-        }
-    });
-
-    revalidatePath(`/admin/bots/${botId}`);
-    revalidatePath(`/admin/evaluators/${botId}`);
-    revalidatePath('/admin/evaluators');
-    return version;
 }
 
 export async function getBotVersions(botId: string) {
     await verifyAdmin();
-    return prisma.botVersion.findMany({
-        where: { bot_id: botId },
-        orderBy: { created_at: 'desc' }
-    });
+    return prisma.botVersion.findMany({ where: { bot_id: botId }, orderBy: { version_number: 'desc' } });
 }
 
 export async function restoreBotVersion(botId: string, versionId: string) {
     await verifyAdmin();
-
-    const version = await prisma.botVersion.findUnique({
-        where: { id: versionId }
+    const result = await prisma.$transaction(async (tx) => {
+        const bot = await lockBot(tx, botId);
+        const version = await tx.botVersion.findFirst({ where: { id: versionId, bot_id: botId } });
+        if (!version) throw new Error('La versión no pertenece a este bot.');
+        if (bot.published) await ensurePublishedVersion(tx, bot);
+        const snapshot = readVersionSnapshot(version, bot);
+        const config = normalizeAndValidateConfig(snapshot.config);
+        await tx.bot.update({ where: { id: botId }, data: {
+            config: config as Prisma.InputJsonValue, prompt_version: snapshot.prompt_version, bot_type: snapshot.bot_type,
+            openai_prompt_id: snapshot.openai_prompt_id, openai_vector_store_id: snapshot.openai_vector_store_id,
+        } });
+        return version;
     });
+    revalidateBot(botId);
+    return result;
+}
 
-    if (!version) throw new Error('Version not found');
-    const validatedConfig = normalizeAndValidateConfig(version.config, 'restoreBotVersion.target_version');
-    const resolvedConfig = validatedConfig;
-
-    const restored = await prisma.bot.updateMany({
-        where: { id: botId, deleted_at: null },
-        data: {
-            config: resolvedConfig as Prisma.InputJsonValue,
-            prompt_version: version.prompt_version,
-            openai_vector_store_id: getPrimaryVectorStoreId(resolvedConfig),
-        }
-    });
-    if (restored.count === 0) throw new Error('Bot not found');
-
+function revalidateBot(botId: string) {
     revalidatePath(`/admin/bots/${botId}`);
     revalidatePath(`/admin/evaluators/${botId}`);
     revalidatePath('/admin/evaluators');
-    return version;
+    revalidatePath('/admin');
 }
 
 export async function publishBotToStaging(botId: string) {
     await verifyAdmin();
-
-    const bot = await prisma.bot.findUnique({
-        where: { id: botId },
-        select: {
-            bot_type: true,
-            openai_prompt_id: true,
-            openai_vector_store_id: true,
-            api_key: true,
-            config: true,
-            prompt_version: true,
-            deleted_at: true,
-        },
+    const draft = await validatedDraft(botId);
+    const flow_lint = await releaseChecks(draft, 'STAGING');
+    const version = await prisma.$transaction(async (tx) => {
+        const current = await lockBot(tx, botId);
+        const normalized = { ...current, config: normalizeAndValidateConfig(current.config) } as Bot;
+        if (fingerprint(normalized) !== fingerprint(draft)) throw new Error('El borrador cambió durante la validación. Reintentá.');
+        return appendVersion(tx, draft, 'STAGING');
     });
-    if (!bot || bot.deleted_at) throw new Error('Bot not found');
-
-    const validatedConfig = normalizeAndValidateConfig(bot.config, 'publishBotToStaging.current_bot');
-    const resolvedConfig = validatedConfig;
-    const flowLint = lintFlowConfig(resolvedConfig);
-    if (flowLint.critical_count > 0) {
-        throw new Error(formatCriticalFlowLintError(
-            flowLint,
-            'No se puede publicar a STAGING: hay errores críticos de flujo.'
-        ));
-    }
-    const rag = normalizeRagConfig(resolvedConfig.rag_config || {}, bot.openai_vector_store_id);
-    if (rag.mode !== 'never' && rag.vector_store_ids.length === 0) {
-        throw new Error('RAG activo requiere al menos un Vector Store ID.');
-    }
-    await assertPricingReadyForRelease({
-        botId,
-        botType: bot.bot_type,
-        openaiPromptId: bot.openai_prompt_id,
-        config: resolvedConfig,
-        stage: 'STAGING',
-    });
-
-    const nextVersion = await nextVersionNumber(botId);
-    const version = await prisma.botVersion.create({
-        data: {
-            bot_id: botId,
-            version_number: nextVersion,
-            config: resolvedConfig as Prisma.InputJsonValue,
-            prompt_version: bot.prompt_version || '1',
-            environment: 'STAGING',
-        },
-    });
-
-    revalidatePath(`/admin/bots/${botId}`);
-    revalidatePath(`/admin/evaluators/${botId}`);
-    revalidatePath('/admin/evaluators');
-    return {
-        version,
-        flow_lint: flowLint as FlowLintReport,
-    };
+    revalidateBot(botId);
+    return { version, flow_lint };
 }
 
 export async function promoteBotToProd(botId: string, stagingVersionId?: string) {
     await verifyAdmin();
-
-    const bot = await prisma.bot.findUnique({
-        where: { id: botId },
-        select: {
-            bot_type: true,
-            openai_prompt_id: true,
-            openai_vector_store_id: true,
-            api_key: true,
-            config: true,
-            prompt_version: true,
-            deleted_at: true,
-        },
-    });
-    if (!bot || bot.deleted_at) throw new Error('Bot not found');
-
-    const currentConfig = normalizeAndValidateConfig(bot.config, 'promoteBotToProd.current_bot');
-    const currentPromptVersion = bot.prompt_version || '1';
-
-    let sourceConfig: BotConfig;
-    let sourcePromptVersion = currentPromptVersion;
-    let stagingSource: 'explicit' | 'latest' | 'auto';
-    let resolvedStagingVersionId: string | null = null;
-
-    if (stagingVersionId) {
-        const explicitStaging = await prisma.botVersion.findUnique({ where: { id: stagingVersionId } });
-        if (!explicitStaging) throw new Error('No existe la versión STAGING seleccionada.');
-        if (explicitStaging.bot_id !== botId) {
-            throw new Error('La versión STAGING seleccionada no pertenece a este bot.');
+    const draft = await validatedDraft(botId);
+    const staging = stagingVersionId
+        ? await prisma.botVersion.findFirst({ where: { id: stagingVersionId, bot_id: botId, environment: 'STAGING' } })
+        : null;
+    if (stagingVersionId && !staging) throw new Error('La versión STAGING no pertenece a este bot.');
+    const source = staging ? { ...draft, ...readVersionSnapshot(staging, draft) } : draft;
+    const flow_lint = await releaseChecks(source, 'PROD');
+    const result = await prisma.$transaction(async (tx) => {
+        const current = await lockBot(tx, botId);
+        if (!staging && fingerprint({ ...current, config: normalizeAndValidateConfig(current.config) } as Bot) !== fingerprint(draft)) {
+            throw new Error('El borrador cambió durante la validación. Reintentá.');
         }
-        sourceConfig = normalizeAndValidateConfig(explicitStaging.config, 'promoteBotToProd.explicit_staging');
-        sourcePromptVersion = explicitStaging.prompt_version || currentPromptVersion;
-        stagingSource = 'explicit';
-        resolvedStagingVersionId = explicitStaging.id;
-    } else {
-        const latestStaging = await prisma.botVersion.findFirst({
-            where: { bot_id: botId, environment: 'STAGING' },
-            orderBy: { created_at: 'desc' },
-        });
-        if (!latestStaging) {
-            sourceConfig = currentConfig;
-            stagingSource = 'auto';
-        } else {
-            const latestStagingConfig = normalizeAndValidateConfig(latestStaging.config, 'promoteBotToProd.latest_staging');
-            const stagingMatchesCurrent = latestStaging.prompt_version === currentPromptVersion
-                && JSON.stringify(latestStagingConfig) === JSON.stringify(currentConfig);
-            if (stagingMatchesCurrent) {
-                sourceConfig = latestStagingConfig;
-                sourcePromptVersion = latestStaging.prompt_version || currentPromptVersion;
-                stagingSource = 'latest';
-                resolvedStagingVersionId = latestStaging.id;
-            } else {
-                sourceConfig = currentConfig;
-                stagingSource = 'auto';
-            }
-        }
-    }
-
-    const flowLint = lintFlowConfig(sourceConfig);
-    if (flowLint.critical_count > 0) {
-        throw new Error(formatCriticalFlowLintError(
-            flowLint,
-            'No se puede promover a PROD: hay errores críticos de flujo.'
-        ));
-    }
-    await assertPricingReadyForRelease({
-        botId,
-        botType: bot.bot_type,
-        openaiPromptId: bot.openai_prompt_id,
-        config: sourceConfig,
-        stage: 'PROD',
+        if (current.published) await ensurePublishedVersion(tx, current);
+        const staged = staging || await appendVersion(tx, source, 'STAGING');
+        const version = await appendVersion(tx, source, 'PROD');
+        await tx.bot.update({ where: { id: botId }, data: { published: true } });
+        return { version, staging_version_id: staged.id };
     });
-    await assertVectorStoresReadyForProd(bot, sourceConfig);
-
-    if (stagingSource === 'auto') {
-        const nextStagingVersion = await nextVersionNumber(botId);
-        const autoStaging = await prisma.botVersion.create({
-            data: {
-                bot_id: botId,
-                version_number: nextStagingVersion,
-                config: sourceConfig as Prisma.InputJsonValue,
-                prompt_version: sourcePromptVersion,
-                environment: 'STAGING',
-            },
-        });
-        resolvedStagingVersionId = autoStaging.id;
-    }
-
-    const nextVersion = await nextVersionNumber(botId);
-    const prodVersion = await prisma.botVersion.create({
-        data: {
-            bot_id: botId,
-            version_number: nextVersion,
-            config: sourceConfig as Prisma.InputJsonValue,
-            prompt_version: sourcePromptVersion,
-            environment: 'PROD',
-        },
-    });
-
-    await prisma.bot.update({
-        where: { id: botId },
-        data: {
-            config: sourceConfig as Prisma.InputJsonValue,
-            prompt_version: sourcePromptVersion,
-            published: true,
-            openai_vector_store_id: getPrimaryVectorStoreId(sourceConfig),
-        },
-    });
-
-    revalidatePath(`/admin/bots/${botId}`);
-    revalidatePath(`/admin/evaluators/${botId}`);
-    revalidatePath('/admin/evaluators');
-    revalidatePath('/admin');
-    return {
-        version: prodVersion,
-        flow_lint: flowLint as FlowLintReport,
-        staging_source: stagingSource,
-        staging_version_id: resolvedStagingVersionId,
-    };
+    revalidateBot(botId);
+    return { ...result, flow_lint, staging_source: staging ? 'explicit' as const : 'auto' as const };
 }
 
 export async function rollbackBotProd(botId: string, prodVersionId?: string) {
     await verifyAdmin();
-    const bot = await prisma.bot.findUnique({
-        where: { id: botId },
-        select: { bot_type: true, openai_prompt_id: true, deleted_at: true },
+    const draft = await validatedDraft(botId);
+    const target = await prisma.botVersion.findFirst({
+        where: { bot_id: botId, environment: 'PROD', ...(prodVersionId ? { id: prodVersionId } : {}) },
+        orderBy: { version_number: 'desc' }, ...(prodVersionId ? {} : { skip: 1 }),
     });
-    if (!bot || bot.deleted_at) throw new Error('Bot not found');
-
-    const targetVersion = prodVersionId
-        ? await prisma.botVersion.findUnique({ where: { id: prodVersionId } })
-        : await prisma.botVersion.findFirst({
-            where: { bot_id: botId, environment: 'PROD' },
-            orderBy: { created_at: 'desc' },
-            skip: 1, // Previous PROD
-        });
-
-    if (!targetVersion) throw new Error('No hay versión PROD previa para rollback.');
-
-    const validatedConfig = normalizeAndValidateConfig(targetVersion.config, 'rollbackBotProd.target_version');
-    const resolvedConfig = validatedConfig;
-    await assertPricingReadyForRelease({
-        botId,
-        botType: bot.bot_type,
-        openaiPromptId: bot.openai_prompt_id,
-        config: resolvedConfig,
-        stage: 'PROD',
+    if (!target) throw new Error('No existe una versión PROD válida para este bot.');
+    const source = { ...draft, ...readVersionSnapshot(target, draft) };
+    await releaseChecks(source, 'PROD');
+    const version = await prisma.$transaction(async (tx) => {
+        await lockBot(tx, botId);
+        const released = await appendVersion(tx, source, 'PROD');
+        await tx.bot.update({ where: { id: botId }, data: { published: true } });
+        return released;
     });
-
-    await prisma.bot.update({
-        where: { id: botId },
-        data: {
-            config: resolvedConfig as Prisma.InputJsonValue,
-            prompt_version: targetVersion.prompt_version,
-            published: true,
-            openai_vector_store_id: getPrimaryVectorStoreId(resolvedConfig),
-        },
-    });
-
-    const nextVersion = await nextVersionNumber(botId);
-    const rollbackVersion = await prisma.botVersion.create({
-        data: {
-            bot_id: botId,
-            version_number: nextVersion,
-            config: resolvedConfig as Prisma.InputJsonValue,
-            prompt_version: targetVersion.prompt_version,
-            environment: 'PROD',
-        },
-    });
-
-    revalidatePath(`/admin/bots/${botId}`);
-    revalidatePath(`/admin/evaluators/${botId}`);
-    revalidatePath('/admin/evaluators');
-    revalidatePath('/admin');
-    return rollbackVersion;
+    revalidateBot(botId);
+    return version;
 }

@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { I18nText } from '@/components/providers/i18n-text';
 import { LanguageSwitcher } from '@/components/providers/language-switcher';
 import Image from 'next/image';
-
 import { loadChatPageContext } from '@/lib/chat-page-context';
 
 interface Props {
@@ -18,7 +17,7 @@ export default async function ChatPage({ params, searchParams }: Props) {
     const { new: forceNew } = await searchParams;
     const forceNewSession = forceNew === 'true';
 
-    const { currentUser, bot, viewerRole } = await loadChatPageContext({
+    const { currentUser, bot, viewerRole, organizations } = await loadChatPageContext({
         botId,
         routeMode: 'standard',
         forceNewSession,
@@ -39,33 +38,30 @@ export default async function ChatPage({ params, searchParams }: Props) {
     }
 
     return (
-        <div className="flex flex-col h-screen bg-background relative overflow-hidden">
-            {/* Background Effects */}
-            <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-primary/10 blur-[150px] rounded-full" />
-            <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-primary/5 blur-[150px] rounded-full" />
-
-            <nav className="z-20 w-full border-b border-white/10 glass px-6 h-16 flex items-center">
-                <div className="max-w-5xl mx-auto w-full flex items-center justify-between">
+        <div className="workspace-canvas flex h-screen flex-col">
+            <nav className="workspace-topbar">
+                <div className="workspace-shell flex h-16 items-center justify-between">
                     <div className="flex items-center space-x-4">
                         <Link href={backHref}>
-                            <Button variant="ghost" size="sm" className="hover:bg-white/10 group">
-                                <ArrowLeft className="mr-2 h-4 w-4 group-hover:-translate-x-1 transition-transform" />
+                            <Button variant="ghost" size="sm" className="h-10 rounded-2xl px-3 font-semibold text-slate-600 hover:bg-slate-100">
+                                <ArrowLeft className="mr-2 h-4 w-4" />
                                 <span className="hidden sm:inline"><I18nText es={backLabelEs} en={backLabelEn} /></span>
                             </Button>
                         </Link>
-                        <div className="w-px h-6 bg-white/10 mx-2 hidden sm:block" />
+                        <div className="mx-2 hidden h-6 w-px bg-slate-200 sm:block" />
                         <div className="flex items-center space-x-2">
-                            <Image src="/icons/assistant.svg" alt="Bot icon" width={18} height={18} className="h-[18px] w-[18px]" />
-                            <span className="text-sm font-semibold tracking-tight">{bot.name}</span>
+                            <Image src="/icons/assistant.svg" alt="Bot icon" width={18} height={18} className="h-[18px] w-[18px] object-contain" />
+                            <span className="text-sm font-semibold tracking-tight text-slate-700">{bot.name}</span>
                         </div>
                     </div>
                     <LanguageSwitcher />
                 </div>
             </nav>
 
-            <main className="flex-1 relative z-10 w-full max-w-5xl mx-auto p-4 sm:p-6 lg:p-10 flex flex-col overflow-hidden">
+            <main className="workspace-shell flex flex-1 flex-col overflow-hidden py-4 sm:py-6 lg:py-8">
                 <ChatInterface
                     bot={bot}
+                    organizations={organizations}
                     userId={currentUser?.userId}
                     viewerRole={viewerRole}
                     requireAuth
